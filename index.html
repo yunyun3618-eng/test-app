@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>爆速レシートおばちゃん v1.9</title>
+    <title>爆速レシートおばちゃん v1.9.2</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         .scan-area { position: absolute; top: 12%; bottom: 38%; left: 10%; right: 10%; z-index: 20; }
@@ -16,10 +16,9 @@
         
         #preview-overlay { position: fixed; inset: 0; z-index: 100; display: none; flex-direction: column; align-items: center; justify-content: center; backdrop-filter: blur(10px); background: rgba(0,0,0,0.95); }
         .no-scrollbar::-webkit-scrollbar { display: none; }
-        
-        /* メッセージエリアの制御 */
         #msg-box { transition: all 0.3s ease; max-height: 200px; overflow: hidden; }
         #msg-box.minimized { max-height: 40px; opacity: 0.8; }
+        .history-card { min-width: 65px; width: 65px; height: 85px; background: rgba(55,65,81,0.8); border-radius: 6px; border: 1.5px solid #10b981; overflow: hidden; flex-shrink: 0; }
     </style>
 </head>
 <body class="bg-gray-900 text-white overflow-hidden font-sans text-xs">
@@ -31,8 +30,8 @@
             </div>
             <div class="p-4 space-y-3 overflow-y-auto no-scrollbar">
                 <div class="grid grid-cols-2 gap-2">
-                    <input type="text" id="edit-date" class="w-full bg-gray-900 border border-gray-600 rounded p-2 text-xs text-white" placeholder="Date">
-                    <input type="text" id="edit-shop" class="w-full bg-gray-900 border border-gray-600 rounded p-2 text-xs text-white" placeholder="Shop">
+                    <input type="text" id="edit-date" class="w-full bg-gray-900 border border-gray-600 rounded p-2 text-xs text-white" placeholder="日付">
+                    <input type="text" id="edit-shop" class="w-full bg-gray-900 border border-gray-600 rounded p-2 text-xs text-white" placeholder="店名">
                 </div>
                 <select id="edit-category" class="w-full bg-gray-900 border border-gray-600 rounded p-2 text-sm text-white">
                     <option>食費</option><option>日用品</option><option>交通費</option><option>交際費</option><option>その他</option>
@@ -53,34 +52,30 @@
         <div class="text-4xl flex-none">👵</div>
         <div class="flex-1">
             <div id="msg-box" class="bg-white p-2 rounded-lg rounded-tl-none shadow-xl border-2 border-green-500 text-gray-800 font-bold mb-2">
-                <p id="msg" class="leading-tight text-[10px]">スキャンの準備はいいかい？<br>ボタンでいつでも止められるよ！</p>
+                <p id="msg" class="leading-tight text-[10px]">撮っても画面は止めないよ！<br>次々見せておくれ！</p>
             </div>
             <div class="flex gap-2">
-                <button onclick="toggleMsg()" class="bg-gray-800/80 px-3 py-1 rounded-full border border-white/20 text-[10px] shadow-lg active:scale-95">▼</button>
-                <button id="stop-btn" onclick="pauseScanner()" class="bg-red-900/80 px-4 py-1 rounded-full border border-red-500/50 text-[10px] shadow-lg active:scale-95">■ 停止</button>
-                <button id="play-btn" onclick="resumeScanner()" class="bg-green-900/80 px-4 py-1 rounded-full border border-green-500/50 text-[10px] shadow-lg active:scale-95">▶ 再生</button>
+                <button onclick="toggleMsg()" class="bg-gray-800/80 px-3 py-1 rounded-full border border-white/20 text-[10px]">▼</button>
+                <button onclick="pauseScanner()" class="bg-red-900/80 px-4 py-1 rounded-full border border-red-500/50 text-[10px]">■ 停止</button>
+                <button onclick="resumeScanner()" class="bg-green-900/80 px-4 py-1 rounded-full border border-green-500/50 text-[10px]">▶ 再生</button>
             </div>
         </div>
     </div>
 
     <div id="camera-container" class="w-full h-screen relative bg-black overflow-hidden">
-        <div id="placeholder" class="absolute inset-0 flex items-center justify-center text-gray-700 text-[10px] uppercase">Waiting for Play...</div>
+        <div id="placeholder" class="absolute inset-0 flex items-center justify-center text-gray-700 text-[10px] uppercase italic">Waiting for camera...</div>
         <div id="scan-frame" class="scan-area pointer-events-none">
             <div class="corner top-left"></div><div class="corner top-right"></div>
             <div class="corner bottom-left"></div><div class="corner bottom-right"></div>
         </div>
     </div>
 
-    <div class="fixed bottom-0 left-0 right-0 z-40 bg-gradient-to-t from-black via-black/95 to-transparent pt-12 pb-8 px-4">
+    <div class="fixed bottom-0 left-0 right-0 z-[50] bg-gradient-to-t from-black via-black/95 to-transparent pt-12 pb-8 px-4">
         <div class="flex items-end gap-3 mb-4">
             <button onclick="alert('一括保存の準備中！')" class="flex-none w-14 h-14 rounded-2xl bg-green-600 flex items-center justify-center shadow-lg active:scale-90 transition-transform">
                 <svg class="h-8 w-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" /></svg>
             </button>
             <div id="history-list" class="flex-1 flex gap-2 overflow-x-auto no-scrollbar min-h-[85px] items-end px-1 italic text-[8px] text-gray-700">NO DATA</div>
-        </div>
-        <div class="flex justify-between items-end border-t border-gray-800 pt-2 px-1 text-[9px]">
-            <div id="status" class="text-gray-600 font-black tracking-widest uppercase italic">v1.9 CONTROL-PANEL</div>
-            <div id="debug-state" class="text-red-500 font-bold">PAUSED</div>
         </div>
     </div>
 
@@ -88,33 +83,19 @@
 
     <script>
         let isProcessing = false;
-        let isPaused = true; // 最初は停止状態
+        let isPaused = true;
         let history = [];
         let currentIndex = -1;
         let videoEl = null;
 
-        // 縮小ボタンの動作
-        function toggleMsg() {
-            document.getElementById('msg-box').classList.toggle('minimized');
-        }
+        function toggleMsg() { document.getElementById('msg-box').classList.toggle('minimized'); }
 
-        // 停止ボタン
-        function pauseScanner() {
-            isPaused = true;
-            document.getElementById('debug-state').innerText = "PAUSED";
-            document.getElementById('debug-state').classList.replace('text-green-500', 'text-red-500');
-            document.getElementById('msg').innerText = "スキャンを止めたよ。ゆっくり準備しな。";
-        }
+        function pauseScanner() { isPaused = true; document.getElementById('msg').innerText = "一時停止中だね。"; }
 
-        // 再生ボタン（開始/再開）
         async function resumeScanner() {
-            if (!videoEl) {
-                await initCamera();
-            }
+            if (!videoEl) await initCamera();
             isPaused = false;
-            document.getElementById('debug-state').innerText = "RUNNING";
-            document.getElementById('debug-state').classList.replace('text-red-500', 'text-green-500');
-            document.getElementById('msg').innerText = "スキャン再開！レシートを見せておくれ！";
+            document.getElementById('msg').innerText = "スキャン中！どんどん撮るよ！";
         }
 
         async function initCamera() {
@@ -147,8 +128,15 @@
             const saveCanvas = document.createElement('canvas');
             saveCanvas.width = video.videoWidth; saveCanvas.height = video.videoHeight;
             saveCanvas.getContext('2d').drawImage(video, 0, 0);
+            
+            // 履歴に追加
             history.unshift({ img: saveCanvas.toDataURL('image/jpeg', 0.5), amount: "", shop: "", category: "食費", date: new Date().toLocaleDateString() });
             updateHistoryUI();
+
+            // 撮影しても videoEl.play() は継続（画面を固めない）
+            document.getElementById('msg').innerText = `${history.length}枚目撮ったよ！`;
+            
+            // 2.5秒後に次を撮れるようにする
             setTimeout(() => { isProcessing = false; }, 2500);
         }
 
@@ -157,7 +145,7 @@
             list.innerHTML = "";
             history.forEach((data, index) => {
                 const card = document.createElement('div');
-                card.className = "history-card flex-none shadow-lg";
+                card.className = "history-card flex-none shadow-lg active:scale-95 transition-transform";
                 card.onclick = () => openPreview(index);
                 card.innerHTML = `<img src="${data.img}" class="w-full h-full object-cover">`;
                 list.appendChild(card);
@@ -166,12 +154,13 @@
 
         function openPreview(index) {
             currentIndex = index;
-            isPaused = true;
-            document.getElementById('preview-img').src = history[index].img;
-            document.getElementById('edit-date').value = history[index].date;
-            document.getElementById('edit-shop').value = history[index].shop;
-            document.getElementById('edit-category').value = history[index].category;
-            document.getElementById('edit-amount').value = history[index].amount;
+            isPaused = true; // 編集時は一時停止
+            const item = history[index];
+            document.getElementById('preview-img').src = item.img;
+            document.getElementById('edit-date').value = item.date;
+            document.getElementById('edit-shop').value = item.shop;
+            document.getElementById('edit-category').value = item.category;
+            document.getElementById('edit-amount').value = item.amount;
             document.getElementById('preview-overlay').style.display = 'flex';
         }
 
@@ -183,9 +172,7 @@
                 history[currentIndex].amount = document.getElementById('edit-amount').value;
             }
             document.getElementById('preview-overlay').style.display = 'none';
-            // プレビューを閉じても勝手に再開せず、元の停止/再生状態を維持するか、
-            // もしくは自動再開させたい場合は here に resumeScanner() を入れる。
-            // 今は安全のために停止状態のままにしておきます。
+            isPaused = false; // カメラ再開
         }
     </script>
 </body>
