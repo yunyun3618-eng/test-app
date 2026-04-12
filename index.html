@@ -3,68 +3,86 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>爆速レシートおばちゃん（枠・完全回避版）</title>
+    <title>爆速レシートおばちゃん（フル装備版）</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        /* 枠の設定：履歴カードに絶対被らないよう、下(bottom)を35%まで大胆に空ける */
-        .scan-area { 
-            position: absolute; 
-            top: 10%; bottom: 35%; left: 10%; right: 10%;
-            z-index: 20;
-        }
-        /* 真の「四隅だけ」：L字をよりハッキリ、かつ短く */
-        .corner { position: absolute; width: 30px; height: 30px; border-color: rgba(74, 222, 128, 0.3); border-style: solid; transition: border-color 0.2s; }
+        .scan-area { position: absolute; top: 12%; bottom: 38%; left: 10%; right: 10%; z-index: 20; }
+        .corner { position: absolute; width: 30px; height: 30px; border-color: rgba(74, 222, 128, 0.3); border-style: solid; transition: border-color 0.1s; }
         .top-left { top: 0; left: 0; border-width: 6px 0 0 6px; }
         .top-right { top: 0; right: 0; border-width: 6px 6px 0 0; }
         .bottom-left { bottom: 0; left: 0; border-width: 0 0 6px 6px; }
         .bottom-right { bottom: 0; right: 0; border-width: 0 6px 6px 0; }
-
-        /* 検知時の色替え */
         .detected .corner { border-color: rgba(74, 222, 128, 1); filter: drop-shadow(0 0 10px rgba(74, 222, 128, 0.8)); }
         
-        .no-scrollbar::-webkit-scrollbar { display: none; }
         .history-card { 
             min-width: 65px; width: 65px; height: 85px; 
             background: rgba(55, 65, 81, 0.8); border-radius: 4px; border: 1.5px solid #10b981;
-            overflow: hidden; flex-shrink: 0; box-shadow: 0 4px 6px rgba(0,0,0,0.4);
-            backdrop-filter: blur(4px);
+            overflow: hidden; flex-shrink: 0;
         }
-
-        @keyframes flash { 0% { background: white; } 100% { background: transparent; } }
+        @keyframes flash { 0% { background: white; opacity: 0.8; } 100% { background: transparent; opacity: 0; } }
+        .flash-overlay { position: absolute; inset: 0; pointer-events: none; z-index: 60; background: transparent; }
         .flash-active { animation: flash 0.3s ease-out; }
+
+        #start-overlay {
+            position: fixed; inset: 0; background: rgba(0,0,0,0.9);
+            z-index: 100; display: flex; flex-direction: column; align-items: center; justify-content: center;
+            cursor: pointer; backdrop-filter: blur(10px);
+        }
+        .btn-icon { background: rgba(0,0,0,0.5); backdrop-filter: blur(4px); border: 1px solid rgba(255,255,255,0.2); }
     </style>
 </head>
 <body class="bg-gray-900 text-white overflow-hidden font-sans">
 
-    <div class="fixed top-0 left-0 right-0 p-4 z-50 bg-gradient-to-b from-black/80 to-transparent flex items-start gap-2">
+    <div id="start-overlay" onclick="startSystem()">
+        <div class="text-6xl mb-4 animate-bounce">👵</div>
+        <h1 class="text-xl font-black mb-2 tracking-widest text-green-400">READY?</h1>
+        <p class="text-xs font-bold text-gray-400">タップしてスキャン開始</p>
+    </div>
+
+    <div id="flash-layer" class="flash-overlay"></div>
+
+    <button class="fixed top-4 right-4 z-50 p-3 rounded-full btn-icon text-gray-300 active:scale-90 transition-transform">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+        </svg>
+    </button>
+
+    <div class="fixed top-0 left-0 right-0 p-4 z-40 bg-gradient-to-b from-black/80 to-transparent flex items-start gap-2">
         <div class="text-4xl">👵</div>
-        <div class="bg-white p-2 rounded-lg rounded-tl-none shadow-xl max-w-[240px] text-gray-800 border-2 border-green-500">
-            <p id="msg" class="text-xs font-bold leading-tight">よし、枠の下側をぐいっと高くしたよ！<br>これで履歴カードにも邪魔されないはずさ！</p>
+        <div class="bg-white p-2 rounded-lg rounded-tl-none shadow-xl max-w-[220px] text-gray-800 border-2 border-green-500">
+            <p id="msg" class="text-[10px] font-bold leading-tight">よし、忘れ物（ボタン）を出しといたよ！<br>準備はいいかい？</p>
         </div>
     </div>
 
     <div id="camera-container" class="w-full h-screen relative bg-black overflow-hidden">
-        <div id="placeholder" class="absolute inset-0 flex items-center justify-center text-[10px] text-gray-600">WAKING UP...</div>
-        
+        <div id="placeholder" class="absolute inset-0 flex items-center justify-center text-[10px] text-gray-700 uppercase tracking-widest">Wait Start</div>
         <div id="scan-frame" class="scan-area pointer-events-none">
-            <div class="corner top-left"></div>
-            <div class="corner top-right"></div>
-            <div class="corner bottom-left"></div>
-            <div class="corner bottom-right"></div>
+            <div class="corner top-left"></div><div class="corner top-right"></div>
+            <div class="corner bottom-left"></div><div class="corner bottom-right"></div>
         </div>
     </div>
 
-    <div class="fixed bottom-0 left-0 right-0 z-40 bg-gradient-to-t from-black via-black/90 to-transparent pt-12 pb-6 px-4">
-        <div id="history-list" class="flex gap-2 overflow-x-auto no-scrollbar mb-4 min-h-[85px] items-end">
-            <div class="text-[8px] text-gray-700 font-bold py-8">NO DATA</div>
+    <div class="fixed bottom-0 left-0 right-0 z-40 bg-gradient-to-t from-black via-black/95 to-transparent pt-12 pb-8 px-4">
+        
+        <div class="flex items-end gap-3 mb-4">
+            <button class="flex-none w-12 h-12 rounded-xl bg-green-600 flex items-center justify-center shadow-lg active:scale-90 transition-transform">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
+                </svg>
+            </button>
+            
+            <div id="history-list" class="flex-1 flex gap-2 overflow-x-auto no-scrollbar min-h-[85px] items-end">
+                <div class="text-[8px] text-gray-700 py-8 italic uppercase tracking-widest">Ready to scan</div>
+            </div>
         </div>
         
         <div class="flex justify-between items-end border-t border-gray-800 pt-2 px-1">
             <div>
-                <div id="status" class="text-[10px] text-green-400 font-black tracking-widest uppercase">Target Scanning</div>
-                <div id="debug" class="text-[8px] text-gray-600 font-mono">Sens: 0.06 / Ratio: --</div>
+                <div id="status" class="text-[10px] text-gray-600 font-black tracking-widest uppercase">Standby</div>
+                <div id="debug" class="text-[8px] text-gray-700 font-mono italic">Buttons restored.</div>
             </div>
-            <div class="text-[8px] text-gray-600 font-bold opacity-40">UI-REFINE v1.3</div>
+            <div class="text-[8px] text-gray-600 font-bold opacity-30 italic">v1.6 FULL-UI</div>
         </div>
     </div>
 
@@ -74,8 +92,27 @@
         let isProcessing = false;
         let scanCount = 0;
         let history = [];
+        let audioCtx;
 
-        async function init() {
+        function playShutterSound() {
+            if (!audioCtx) return;
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.type = 'triangle';
+            osc.frequency.setValueAtTime(40, audioCtx.currentTime);
+            osc.frequency.exponentialRampToValueAtTime(10, audioCtx.currentTime + 0.1);
+            gain.gain.setValueAtTime(0.5, audioCtx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.1);
+            osc.connect(gain); gain.connect(audioCtx.destination);
+            osc.start(); osc.stop(audioCtx.currentTime + 0.1);
+        }
+
+        async function startSystem() {
+            audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            document.getElementById('start-overlay').style.display = 'none';
+            document.getElementById('status').innerText = "SYSTEM ACTIVE";
+            document.getElementById('status').classList.replace('text-gray-600', 'text-green-400');
+
             try {
                 const stream = await navigator.mediaDevices.getUserMedia({ 
                     video: { facingMode: "environment", width: { ideal: 1280 } } 
@@ -86,59 +123,41 @@
                 video.play();
                 video.className = "w-full h-full object-cover";
                 document.getElementById('placeholder').replaceWith(video);
-                
-                setInterval(() => detect(video), 250);
-            } catch (e) { document.getElementById('msg').innerText = "カメラ、出しておくれよ。"; }
+                setInterval(() => detect(video), 200);
+            } catch (e) { alert("カメラ許可をおくれよ！"); }
         }
 
         function detect(video) {
             if (isProcessing || !video.videoWidth) return;
-
             const canvas = document.getElementById('proc-canvas');
             const ctx = canvas.getContext('2d');
             canvas.width = 100; canvas.height = 100;
             ctx.drawImage(video, 0, 0, 100, 100);
-            
             const pixels = ctx.getImageData(0, 0, 100, 100).data;
             let whiteCount = 0;
             for (let i = 0; i < pixels.length; i += 4) {
                 if (pixels[i] > 185 && pixels[i+1] > 185 && pixels[i+2] > 185) whiteCount++;
             }
-
             const ratio = whiteCount / 10000;
-            const frame = document.getElementById('scan-frame');
-            document.getElementById('debug').innerText = `Sens: 0.06 / Ratio: ${Math.round(ratio * 100)}%`;
-
-            if (ratio > 0.06 && ratio < 0.65) {
-                frame.classList.add('detected');
+            if (ratio > 0.08 && ratio < 0.65) {
+                document.getElementById('scan-frame').classList.add('detected');
                 capture(video);
             } else {
-                frame.classList.remove('detected');
+                document.getElementById('scan-frame').classList.remove('detected');
             }
         }
 
         function capture(video) {
             isProcessing = true;
             scanCount++;
-
+            playShutterSound();
             const saveCanvas = document.createElement('canvas');
-            saveCanvas.width = video.videoWidth;
-            saveCanvas.height = video.videoHeight;
+            saveCanvas.width = video.videoWidth; saveCanvas.height = video.videoHeight;
             saveCanvas.getContext('2d').drawImage(video, 0, 0);
             const dataUrl = saveCanvas.toDataURL('image/jpeg', 0.5);
-
-            const container = document.getElementById('camera-container');
-            container.classList.add('flash-active');
-            setTimeout(() => container.classList.remove('flash-active'), 300);
-
+            document.getElementById('flash-layer').classList.add('flash-active');
+            setTimeout(() => document.getElementById('flash-layer').classList.remove('flash-active'), 300);
             history.unshift(dataUrl);
-            updateList();
-
-            document.getElementById('msg').innerText = `${scanCount}枚目！バッチリ撮れたよ！`;
-            setTimeout(() => { isProcessing = false; }, 3000);
-        }
-
-        function updateList() {
             const list = document.getElementById('history-list');
             list.innerHTML = "";
             history.forEach(data => {
@@ -147,9 +166,9 @@
                 card.innerHTML = `<img src="${data}" class="w-full h-full object-cover">`;
                 list.appendChild(card);
             });
+            document.getElementById('msg').innerText = `${scanCount}枚目！ボタンもバッチリだね！`;
+            setTimeout(() => { isProcessing = false; }, 2500);
         }
-
-        window.onload = init;
     </script>
 </body>
 </html>
