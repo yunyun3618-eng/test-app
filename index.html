@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>爆速レシートおばちゃん</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .blinking-frame { border: 4px solid #4ade80; animation: blink 1.5s infinite; }
+        @keyframes blink { 0% { opacity: 1; } 50% { opacity: 0.3; } 100% { opacity: 1; } }
+    </style>
+</head>
+<body class="bg-gray-900 text-white overflow-hidden font-sans">
+
+    <div class="fixed top-0 left-0 right-0 p-4 flex justify-between items-start z-10 bg-gradient-to-b from-black/70 to-transparent">
+        <div class="flex items-start gap-2">
+            <div class="text-4xl">👵</div>
+            <div class="bg-white text-gray-800 p-2 rounded-lg rounded-tl-none relative shadow-lg max-w-[200px]">
+                <p id="msg" class="text-sm font-bold">あんた、レシート見せてごらん！</p>
+                <button class="absolute -top-2 -right-2 bg-gray-400 text-white text-xs rounded-full w-5 h-5">▼</button>
+            </div>
+        </div>
+        <button class="text-2xl">⚙️</button>
+    </div>
+
+    <div class="w-full h-screen flex items-center justify-center relative bg-black">
+        <div id="camera-placeholder" class="text-gray-600">カメラ起動中...</div>
+        <div class="absolute w-64 h-80 blinking-frame rounded-lg pointer-events-none"></div>
+    </div>
+
+    <div class="fixed bottom-0 left-0 right-0 p-4 z-10 bg-gradient-to-t from-black/90 to-transparent">
+        <div class="flex gap-2 overflow-x-auto pb-4 mb-2 no-scrollbar">
+            <div class="min-w-[80px] h-20 bg-gray-700 rounded border border-gray-500 flex items-center justify-center text-xs text-gray-400">履歴なし</div>
+        </div>
+
+        <div class="flex justify-between items-center">
+            <div class="text-xs text-green-400 font-bold">お試し版：残り 5枚</div>
+            <button class="bg-green-500 hover:bg-green-600 text-white px-8 py-3 rounded-full font-bold shadow-xl active:scale-95 transition-all">
+                💾 保存する
+            </button>
+        </div>
+    </div>
+
+</body>
+</html>
