@@ -3,51 +3,40 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>爆速レシートおばちゃん</title>
+    <title>爆速レシートおばちゃん（AI連携版）</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        /* 四隅だけの枠（点滅） */
-        .scan-frame {
-            position: absolute; width: 16rem; height: 20rem; /* w-64, h-80 */
-            border: 4px solid transparent; animation: blink 1.5s infinite;
-        }
-        .scan-frame::before, .scan-frame::after {
-            content: ''; position: absolute; width: 40px; height: 40px; border-color: #4ade80; border-style: solid;
-        }
-        /* 左上と右下 */
+        .scan-frame { position: absolute; width: 16rem; height: 20rem; border: 4px solid transparent; animation: blink 1.5s infinite; }
+        .scan-frame::before, .scan-frame::after { content: ''; position: absolute; width: 40px; height: 40px; border-color: #4ade80; border-style: solid; }
         .scan-frame::before { top: -4px; left: -4px; border-width: 4px 0 0 4px; }
         .scan-frame::after { bottom: -4px; right: -4px; border-width: 0 4px 4px 0; }
-        /* 右上と左下 */
-        .scan-frame-inner::before, .scan-frame-inner::after {
-            content: ''; position: absolute; width: 40px; height: 40px; border-color: #4ade80; border-style: solid;
-        }
+        .scan-frame-inner::before, .scan-frame-inner::after { content: ''; position: absolute; width: 40px; height: 40px; border-color: #4ade80; border-style: solid; }
         .scan-frame-inner::before { top: -4px; right: -4px; border-width: 4px 4px 0 0; }
         .scan-frame-inner::after { bottom: -4px; left: -4px; border-width: 0 0 4px 4px; }
-
         @keyframes blink { 0% { opacity: 1; } 50% { opacity: 0.3; } 100% { opacity: 1; } }
-        /* 撮影時のフラッシュ */
         .flash { animation: flashBg 0.5s; }
         @keyframes flashBg { 0% { background-color: white; } 100% { background-color: black; } }
-
-        /* 履歴画像のフェードイン */
         .fade-in { animation: fadeIn 0.5s; }
         @keyframes fadeIn { 0% { opacity: 0; transform: translateY(10px); } 100% { opacity: 1; transform: translateY(0); } }
     </style>
 </head>
 <body class="bg-gray-900 text-white overflow-hidden font-sans">
 
+    <script>
+        const GEMINI_API_KEY = "AIzaSyBhRkqQT_H3E5H6pItF8_145QZjp1WThsc"; 
+    </script>
+
     <div class="fixed top-0 left-0 right-0 p-4 flex justify-between items-start z-30 bg-gradient-to-b from-black/70 to-transparent text-gray-800">
         <div class="flex items-start gap-2">
             <div class="text-4xl">👵</div>
             <div class="bg-white p-2 rounded-lg rounded-tl-none relative shadow-lg max-w-[200px]">
-                <p id="msg" class="text-sm font-bold">あんた、レシートを枠に入れてごらん！</p>
+                <p id="msg" class="text-sm font-bold">あんた、レシートを枠に入れてごらん！おばちゃんが見てあげるからね。</p>
             </div>
         </div>
     </div>
 
     <div id="camera-container" class="w-full h-screen flex items-center justify-center relative bg-black">
         <div id="camera-placeholder" class="text-gray-600">カメラ起動中...</div>
-        
         <div class="scan-frame z-20 pointer-events-none">
             <div class="scan-frame-inner relative w-full h-full"></div>
         </div>
@@ -57,119 +46,112 @@
         <div id="history-list" class="flex gap-2 overflow-x-auto pb-4 mb-2 no-scrollbar">
             <div id="history-empty" class="min-w-[80px] h-20 bg-gray-700 rounded border border-gray-500 flex items-center justify-center text-xs text-gray-400 font-bold">履歴なし</div>
         </div>
-        
         <div class="flex justify-between items-center">
-            <div id="status" class="text-xs text-green-400 font-bold">自動スキャン：待機中</div>
-            <button class="bg-gray-600 text-gray-300 px-8 py-3 rounded-full font-bold shadow-xl cursor-not-allowed">
-                💾 処理中...
-            </button>
+            <div id="status" class="text-xs text-green-400 font-bold">AI：監視中...</div>
+            <button class="bg-gray-600 text-gray-300 px-8 py-3 rounded-full font-bold shadow-xl cursor-not-allowed">💾 AI自動保存モード</button>
         </div>
     </div>
 
     <canvas id="shutter-canvas" class="hidden"></canvas>
 
     <script>
-        let scanCount = 0; // 何枚目かを数えるカウンター
-        let scanTimer = null; // ループ用のタイマー
+        let scanCount = 0;
+        let isProcessing = false;
 
         async function startCamera() {
             const container = document.getElementById('camera-placeholder');
             try {
-                const stream = await navigator.mediaDevices.getUserMedia({ 
-                    video: { facingMode: "environment" }, 
-                    audio: false 
-                });
+                const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" }, audio: false });
                 const videoElement = document.createElement('video');
-                videoElement.id = 'camera-video'; // IDを追加
+                videoElement.id = 'camera-video';
                 videoElement.srcObject = stream;
                 videoElement.setAttribute('playsinline', ''); 
                 videoElement.play();
                 videoElement.className = "w-full h-full object-cover";
-                
                 container.innerHTML = "";
                 container.appendChild(videoElement);
-                document.getElementById('msg').innerText = "おっ、いい感じ！じっとしててね！";
-                document.getElementById('status').innerText = "自動スキャン：準備完了";
-
-                // 【爆速連写ループ・スタート】
-                // 3秒後に1枚目を撮る
-                scanTimer = setTimeout(autoScanLoop, 3000);
-
+                
+                // AI判定ループを開始（2秒おきにチェック）
+                setInterval(aiScanLoop, 2000);
             } catch (err) {
                 document.getElementById('msg').innerText = "カメラが映らないねぇ。";
             }
         }
 
-        // 自動スキャンの連写ループ
-        function autoScanLoop() {
+        async function aiScanLoop() {
+            if (isProcessing || GEMINI_API_KEY.includes("貼り付け")) return;
+            
             const video = document.getElementById('camera-video');
-            if (!video) return; // カメラが動いていなければ中止
+            const canvas = document.getElementById('shutter-canvas');
+            if (!video || !video.videoWidth) return;
 
-            scanCount++; // 枚数を＋1
+            isProcessing = true;
+            document.getElementById('status').innerText = "AI：レシートを探し中...";
 
-            // 1. おばちゃんが叫ぶ
-            const msgs = [
-                `${scanCount}枚目、預かったよ！`,
-                `はい、${scanCount}枚目！じっとして！`,
-                `どんどん持っておいで！${scanCount}枚目！`,
-                `よし、${scanCount}枚目完了！`
-            ];
-            // 枚数に合わせてセリフを変える（配列の数でループさせる）
-            document.getElementById('msg').innerText = msgs[(scanCount - 1) % msgs.length];
-            document.getElementById('status').innerText = `自動スキャン：${scanCount}枚目を処理中...`;
+            const context = canvas.getContext('2d');
+            canvas.width = video.videoWidth / 2; // 負荷軽減のため縮小
+            canvas.height = video.videoHeight / 2;
+            context.drawImage(video, 0, 0, canvas.width, canvas.height);
+            const base64Image = canvas.toDataURL('image/jpeg', 0.5).split(',')[1];
 
-            // 2. 本当に写真を撮って履歴に入れる
-            takePhotoAndAddToHistory(video);
+            try {
+                const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        contents: [{
+                            parts: [
+                                { text: "この画像の中央にレシートがはっきり映っていて、文字が読めそうな状態なら 'YES'、そうでなければ 'NO' とだけ1単語で答えて。余計な説明は不要。" },
+                                { inline_data: { mime_type: "image/jpeg", data: base64Image } }
+                            ]
+                        }]
+                    })
+                });
 
-            // 3. フラッシュ演出
-            const cameraContainer = document.getElementById('camera-container');
-            cameraContainer.classList.add('flash');
-            setTimeout(() => {
-                cameraContainer.classList.remove('flash');
-                document.getElementById('status').innerText = `自動スキャン：待機中`;
-            }, 500);
+                const data = await response.json();
+                const result = data.candidates[0].content.parts[0].text.trim().toUpperCase();
 
-            // 4. 【爆速ループ】3秒後にまた自分自身（この関数）を呼び出す
-            scanTimer = setTimeout(autoScanLoop, 3000);
+                if (result.includes("YES")) {
+                    executeCapture(video);
+                } else {
+                    document.getElementById('status').innerText = "AI：待機中";
+                }
+            } catch (err) {
+                console.error("AI Error:", err);
+            } finally {
+                // 判定が終わったら、少し間を空けて次へ
+                setTimeout(() => { isProcessing = false; }, 1000);
+            }
         }
 
-        // カメラ映像を画像にして履歴に足す魔法
-        function takePhotoAndAddToHistory(video) {
+        function executeCapture(video) {
+            scanCount++;
             const canvas = document.getElementById('shutter-canvas');
             const context = canvas.getContext('2d');
-
-            // キャンバスのサイズをビデオに合わせる（ここが写真になる）
             canvas.width = video.videoWidth;
             canvas.height = video.videoHeight;
-
-            // ビデの一瞬をキャンバスに「描画」する
-            context.drawImage(video, 0, 0, canvas.width, canvas.height);
-
-            // キャンバスから「画像データURL」を取り出す（これが本物の写真データ）
+            context.drawImage(video, 0, 0);
             const imageDataUrl = canvas.toDataURL('image/png');
 
-            // 履歴エリアに画像付きカードを足す
+            // 演出
+            document.getElementById('camera-container').classList.add('flash');
+            setTimeout(() => document.getElementById('camera-container').classList.remove('flash'), 500);
+            
+            const msgs = ["いいレシートだね！", "はい、預かったよ！", "バッチリ映ったよ！", "どんどん持ってきな！"];
+            document.getElementById('msg').innerText = `${scanCount}枚目！${msgs[scanCount % msgs.length]}`;
+
+            // 履歴追加
             const list = document.getElementById('history-list');
             const empty = document.getElementById('history-empty');
-
-            if (empty) empty.remove(); // 「履歴なし」を消す
-
-            // 新しいプレビューカード（本物の画像付き）を作る
+            if (empty) empty.remove();
             const newCard = document.createElement('div');
-            newCard.className = "min-w-[80px] h-20 bg-gray-700 rounded border border-green-500 overflow-hidden text-xs text-green-400 font-bold fade-in";
-            
-            // カードの中身に本物の画像（imageDataUrl）を入れる
-            newCard.innerHTML = `
-                <img src="${imageDataUrl}" class="w-full h-full object-cover">
-            `;
-            list.prepend(newCard); // 一番左（最新）に追加
+            newCard.className = "min-w-[80px] h-20 bg-gray-700 rounded border border-green-500 overflow-hidden fade-in";
+            newCard.innerHTML = `<img src="${imageDataUrl}" class="w-full h-full object-cover">`;
+            list.prepend(newCard);
         }
 
         window.onload = startCamera;
-        document.body.addEventListener('click', () => {
-            if (!document.querySelector('video')) startCamera();
-        }, { once: true });
+        document.body.addEventListener('click', () => { if (!document.querySelector('video')) startCamera(); }, { once: true });
     </script>
-
 </body>
 </html>
