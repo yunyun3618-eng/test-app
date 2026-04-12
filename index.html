@@ -82,9 +82,9 @@
         .history-card img { width: 100%; height: 100%; object-fit: cover; }
     </style>
 </head>
-<body class="bg-gray-900 text-white overflow-hidden font-sans text-xs flex flex-col h-screen">
+<body class="bg-gray-900 text-white overflow-hidden font-sans text-xs flex flex-col h-screen" onload="preInitCamera()">
 
-<div id="ready-screen" class="fixed inset-0 z-[300] bg-black flex flex-col items-center justify-center">
+<div id="ready-screen" class="fixed inset-0 z-[300] bg-black/60 backdrop-blur-sm flex flex-col items-center justify-center">
     <h1 class="text-xl font-bold text-green-400 mb-10 tracking-widest">RECEIPT SCANNER</h1>
     <button onclick="startApp()" class="bg-green-600 px-16 py-5 rounded-xl font-bold text-lg shadow-2xl active:scale-95 transition-all">スキャンを開始する</button>
 </div>
@@ -138,7 +138,7 @@
 </div>
 
 <div class="fixed bottom-0 left-0 right-0 z-[50] bg-gradient-to-t from-black pt-16 pb-8 px-4 flex items-end gap-3 pointer-events-none">
-    <button class="flex-none w-16 h-16 rounded-2xl bg-green-600 flex items-center justify-center pointer-events-auto active:scale-90 text-2xl">💾</button>
+    <button class="flex-none w-16 h-16 rounded-2xl bg-green-600 flex items-center justify-center pointer-events-auto active:scale-90 text-2xl" onclick="finalSave()">💾</button>
     <div id="history-list" class="pointer-events-auto"></div>
 </div>
 
@@ -149,16 +149,15 @@ let isProcessing = false, isPaused = true, historyData = [], currentIndex = -1, 
 let speedMode = false; 
 let audioCtx;
 let stabilityCounter = 0;
-const STABILITY_THRESHOLD = 3;
+const STABILITY_THRESHOLD = 5; // 1枚目からの手ブレ防止を強化
 
 // --- 修正：画像ズーム・移動用の内部変数 ---
 let scale = 1, lastScale = 1, startDist = 0;
 let posX = 0, posY = 0, startX = 0, startY = 0;
 
-// --- 【修正】ブラウザ離脱・復帰時のゾンビ撮影防止とデータ保護 ---
+// --- 修正：ブラウザ離脱・復帰時の挙動 ---
 window.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'hidden') {
-        // 離れた瞬間に、今のデータをブラウザの保管庫に隠す
         if (historyData.length > 0) {
             localStorage.setItem('taxhelper_backup', JSON.stringify(historyData));
         }
@@ -166,45 +165,52 @@ window.addEventListener('visibilitychange', () => {
         isProcessing = true; 
         document.getElementById('crosshair').classList.remove('blinking');
     } else {
-        // 戻ってきたら「再生ボタン待ち」の状態ではなく、リロードを促す
         isPaused = true;
         isProcessing = true;
         document.getElementById('crosshair').classList.remove('blinking');
-        
-        // メッセージを更新し、物理的にリロードさせる導線を作る
         updateAIChat("【接続リセット】カメラを再起動する必要があるよ。ボタンを押して続きから始めよう！", true);
-        
-        // UI書き換え：再生・停止ボタンを「復帰ボタン」に差し替え
         const ctrl = document.getElementById('main-controls');
         if (ctrl) {
-            ctrl.innerHTML = `
-                <button onclick="location.reload()" class="bg-blue-600 px-8 py-2 rounded-full text-[10px] font-bold shadow-xl animate-bounce pointer-events-auto">
-                    🔄 データを保持して再起動
-                </button>
-            `;
+            ctrl.innerHTML = `<button onclick="location.reload()" class="bg-blue-600 px-8 py-2 rounded-full text-[10px] font-bold shadow-xl animate-bounce pointer-events-auto">🔄 データを保持して再起動</button>`;
         }
     }
 });
 
+// --- 【修正：3点目】透過背景のための事前カメラ起動 ---
+async function preInitCamera() {
+    try {
+        const s = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment", width: { ideal: 1280 } } });
+        videoEl = document.createElement('video'); videoEl.srcObject = s; videoEl.setAttribute('playsinline', ''); videoEl.play();
+        videoEl.className = "w-full h-full object-cover"; document.getElementById('camera-container').prepend(videoEl);
+        
+        // 判定ループだけはバックグラウンドで開始しておくが、isPaused でガード
+        setInterval(() => {
+            if(!isPaused && !isProcessing && videoEl.readyState === 4) detect(videoEl);
+        }, 250);
+    } catch (e) {
+        console.error("Pre-camera failed", e);
+    }
+}
+
 async function startApp() {
-    // 起動時にバックアップがあれば復元する
     const backup = localStorage.getItem('taxhelper_backup');
     if (backup) {
         historyData = JSON.parse(backup);
-        localStorage.removeItem('taxhelper_backup'); // 復元したらゴミ箱は空にする
+        localStorage.removeItem('taxhelper_backup');
     }
 
     audioCtx = new (window.AudioContext || window.webkitAudioContext)();
     document.getElementById('ready-screen').style.display = 'none';
-    await initCamera();
     
-    // 復旧データがある場合のメッセージ対応
+    // カメラが既に preInit で起動していればそのまま、失敗していれば再試行
+    if (!videoEl) await preInitCamera();
+    
     if (historyData.length > 0) {
         updateHistoryUI();
         updateAIChat("おかえり！さっき撮った" + historyData.length + "枚はちゃんと取っておいたよ。再開しよう！");
     }
     resumeScanner();
-    initZoomEvents(); // ズーム操作の初期化
+    initZoomEvents();
 }
 
 function setSpeedMode(s) {
@@ -229,7 +235,7 @@ function updateAIChat(text, isReport = false) {
 
 function pauseScanner() { 
     isPaused = true; 
-    isProcessing = true; // 判定ループを物理的にロック
+    isProcessing = true; 
     document.getElementById('crosshair').classList.remove('blinking'); 
     
     if (historyData.length > 0) {
@@ -248,23 +254,7 @@ function resumeScanner() {
     document.getElementById('crosshair').classList.add('blinking'); 
 }
 
-async function initCamera() {
-    try {
-        const s = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment", width: { ideal: 1280 } } });
-        // 本来は track の ended を監視すべきだが、リロード方式に切り替えたため簡略化
-        
-        videoEl = document.createElement('video'); videoEl.srcObject = s; videoEl.setAttribute('playsinline', ''); videoEl.play();
-        videoEl.className = "w-full h-full object-cover"; document.getElementById('camera-container').prepend(videoEl);
-        
-        setInterval(() => {
-            // isPaused か isProcessing のどちらかでも true なら絶対に入らせない
-            if(!isPaused && !isProcessing && videoEl.readyState === 4) detect(videoEl);
-        }, 250);
-    } catch (e) { 
-        updateAIChat("【エラー】カメラを起動できませんでした。", true);
-    }
-}
-
+// --- 【修正：2点目】1枚目の手ブレを徹底排除する判定ロジック ---
 function detect(v) {
     if (isProcessing || isPaused || !v.videoWidth) return;
     const c = document.getElementById('proc-canvas'); 
@@ -274,12 +264,12 @@ function detect(v) {
     let white = 0;
     
     for (let i = 0; i < p.length; i += 4) { 
-        if (p[i] > 180 && p[i+1] > 180 && p[i+2] > 180) white++; 
+        if (p[i] > 185 && p[i+1] > 185 && p[i+2] > 185) white++; 
     }
     const ratio = white / 10000;
     
-    // 比率の判定（ここを少しシビアにして「前の写真」の残像を防ぐ）
-    if (ratio > 0.12 && ratio < 0.55) {
+    // 1枚目でも必ずカウンタを経由させる。比率判定も厳密化
+    if (ratio > 0.15 && ratio < 0.50) {
         stabilityCounter++;
         if (stabilityCounter === 1) {
             document.getElementById('msg').innerText = "そのまま止めて！ピントを合わせてるよ...";
@@ -298,7 +288,7 @@ function detect(v) {
 
 function playBeepAndCapture(v) {
     if(!audioCtx || isProcessing || isPaused) return;
-    isProcessing = true; // 撮影した瞬間に即座に物理ロック
+    isProcessing = true; 
 
     const o = audioCtx.createOscillator(); const g = audioCtx.createGain();
     o.type = 'sine'; o.frequency.setValueAtTime(880, audioCtx.currentTime);
@@ -311,24 +301,19 @@ function playBeepAndCapture(v) {
     
     const newEntry = { 
         img: c.toDataURL('image/jpeg', 0.6), 
-        amount: "", 
-        shop: "", 
-        items: [], 
-        date: new Date().toLocaleDateString() 
+        amount: "", shop: "", items: [], date: new Date().toLocaleDateString() 
     };
     historyData.unshift(newEntry);
     updateHistoryUI();
 
     if (!speedMode) {
-        openPreview(0); // プレビューを開く（この間 isProcessing=true でロック継続）
+        openPreview(0); 
     } else {
         updateAIChat(`${historyData.length}枚目、受け取ったよ！次は？`);
-        // 連続モード時：少し間を置いてからロック解除（同じレシートを連続で撮らないため）
         setTimeout(() => { if(!isPaused) isProcessing = false; }, 1800); 
     }
 }
 
-// --- 修正：画像ズーム・移動用の反映処理 ---
 function updateTransform() {
     const img = document.getElementById('preview-img');
     img.style.transform = `translate(${posX}px, ${posY}px) scale(${scale})`;
@@ -347,7 +332,7 @@ function initZoomEvents() {
     }, {passive: false});
 
     overlay.addEventListener('touchmove', (e) => {
-        e.preventDefault(); // これがページ全体のズームを阻止する核
+        e.preventDefault(); 
         if (e.touches.length === 2) {
             const dist = Math.hypot(e.touches[0].pageX - e.touches[1].pageX, e.touches[0].pageY - e.touches[1].pageY);
             scale = Math.min(Math.max(1, lastScale * (dist / startDist)), 4);
@@ -361,26 +346,20 @@ function initZoomEvents() {
 
 function openPreview(i) {
     currentIndex = i;
-    isPaused = true; 
     isProcessing = true; 
     document.getElementById('crosshair').classList.remove('blinking');
-    
-    // 画像座標・倍率リセット
     scale = 1; posX = 0; posY = 0;
     updateTransform();
-    
     const it = historyData[i]; 
     document.getElementById('preview-img').src = it.img;
     document.getElementById('edit-date').value = it.date; 
     document.getElementById('edit-shop').value = it.shop;
     document.getElementById('edit-amount').value = it.amount;
-    
-    const area = document.getElementById('edit-items-area');
-    area.innerHTML = it.items.length ? "" : "<p class='text-gray-400 text-center italic'>項目未解析</p>";
+    document.getElementById('edit-items-area').innerHTML = "<p class='text-gray-400 text-center italic'>項目未解析</p>";
     document.getElementById('preview-overlay').style.display = 'block';
 }
 
-// --- 【修正】単体モードでも「停止」を押すまで自動再開 ---
+// --- 【修正：1点目】「反映」後の自動ループ再開 ---
 function closePreview(save) {
     if (save && currentIndex !== -1) {
         const it = historyData[currentIndex];
@@ -391,11 +370,15 @@ function closePreview(save) {
     }
     document.getElementById('preview-overlay').style.display = 'none';
     
-    // 停止中（Pause）でなければ、プレビューを閉じた瞬間に解析を再開する
+    // ■ 停止が押されていなければ、反映後即座に「スキャン待機」に戻す
     if (!isPaused) { 
-        isProcessing = false; // ロック解除
+        isProcessing = false; 
         document.getElementById('crosshair').classList.add('blinking');
         updateAIChat("次のレシートをどうぞ！");
+    } else {
+        // 停止中ならロックを維持し、再生ボタン待ちにする
+        isProcessing = true;
+        updateAIChat("一時停止中だよ。再開するなら再生を押してね。");
     }
 }
 
@@ -406,6 +389,11 @@ function updateHistoryUI() {
         card.innerHTML = `<img src="${d.img}">`; l.appendChild(card);
     });
     l.scrollLeft = 0;
+}
+
+function finalSave() {
+    localStorage.removeItem('taxhelper_backup');
+    alert("全データを保存したよ！(擬似)");
 }
 </script>
 </body>
