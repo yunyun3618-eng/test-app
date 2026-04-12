@@ -3,25 +3,27 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>爆速レシートおばちゃん（爆速検知版）</title>
+    <title>爆速レシートおばちゃん（物理検知・完成版）</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        /* 枠を「カメラ画面より一回り小さい」サイズに（端から8%内側） */
+        /* 枠を「カメラプレビューより一回り小さい」サイズに（端から8%内側） */
         .scan-frame { 
             position: absolute; 
             top: 8%; bottom: 15%; left: 8%; right: 8%;
-            border: 2px solid rgba(255, 255, 255, 0.1); /* 最初は薄いグレー */
+            border: 2px solid transparent; 
             z-index: 20;
         }
-        /* ターゲット検知時の緑枠 */
-        .scan-frame.detected { border-color: rgba(74, 222, 128, 1); border-width: 4px; }
-
-        .scan-frame::before, .scan-frame::after { content: ''; position: absolute; width: 40px; height: 40px; border-color: #4ade80; border-style: solid; opacity: 0; }
-        .scan-frame.detected::before { top: -4px; left: -4px; border-width: 8px 0 0 8px; opacity: 1; }
-        .scan-frame.detected::after { bottom: -4px; right: -4px; border-width: 0 8px 8px 0; opacity: 1; }
-        .scan-frame-inner::before, .scan-frame-inner::after { content: ''; position: absolute; width: 40px; height: 40px; border-color: #4ade80; border-style: solid; opacity: 0; }
-        .scan-frame.detected .scan-frame-inner::before { top: -4px; right: -4px; border-width: 8px 8px 0 0; opacity: 1; }
-        .scan-frame.detected .scan-frame-inner::after { bottom: -4px; left: -4px; border-width: 0 0 8px 8px; opacity: 1; }
+        /* 四隅だけの枠（検出時に点滅） */
+        .scan-frame::before, .scan-frame::after { content: ''; position: absolute; width: 60px; height: 60px; border-color: rgba(74, 222, 128, 0.1); border-style: solid; }
+        .scan-frame::before { top: -2px; left: -2px; border-width: 8px 0 0 8px; }
+        .scan-frame::after { bottom: -2px; right: -2px; border-width: 0 8px 8px 0; }
+        .scan-frame-inner::before, .scan-frame-inner::after { content: ''; position: absolute; width: 60px; height: 60px; border-color: rgba(74, 222, 128, 0.1); border-style: solid; }
+        .scan-frame-inner::before { top: -2px; right: -2px; border-width: 8px 8px 0 0; }
+        .scan-frame-inner::after { bottom: -2px; left: -2px; border-width: 0 0 8px 8px; }
+        
+        /* ターゲット検知時の緑枠の点灯（四隅だけ） */
+        .scan-frame.detected::before, .scan-frame.detected::after,
+        .scan-frame.detected .scan-frame-inner::before, .scan-frame.detected .scan-frame-inner::after { border-color: rgba(74, 222, 128, 1); opacity: 1; }
         
         @keyframes flashBg { 0% { background-color: rgba(255,255,255,0.8); } 100% { background-color: transparent; } }
         .flash { animation: flashBg 0.3s ease-out; }
@@ -32,13 +34,13 @@
     <div class="fixed top-0 left-0 right-0 p-4 z-40 bg-gradient-to-b from-black/80 to-transparent flex items-start gap-2">
         <div class="text-4xl">👵</div>
         <div class="bg-white p-2 rounded-lg rounded-tl-none shadow-xl max-w-[240px] text-gray-800">
-            <p id="msg" class="text-xs font-bold leading-tight">よし、知能は一旦置いとくよ！<br>白い紙があれば、おばちゃんがすぐ撮ってあげるからね！</p>
+            <p id="msg" class="text-xs font-bold leading-tight">よし、枠を直したよ！<br>白い紙があれば、おばちゃんがすぐ撮ってあげるからね！</p>
         </div>
     </div>
 
     <div id="camera-container" class="w-full h-screen flex items-center justify-center relative bg-black overflow-hidden">
         <div id="camera-placeholder" class="text-gray-600 text-[10px] tracking-widest">CONNECTING CAMERA...</div>
-        <div id="scan-frame" class="scan-frame pointer-events-none">
+        <div id="scan-frame" class="scan-frame pointer-events-none detected-frame">
             <div class="scan-frame-inner relative w-full h-full"></div>
         </div>
     </div>
@@ -47,20 +49,21 @@
         <div id="history-list" class="flex gap-2 overflow-x-auto pb-4 mb-2 no-scrollbar min-h-[50px]"></div>
         <div class="flex justify-between items-end px-1">
             <div class="flex flex-col">
-                <div id="status" class="text-[12px] text-green-400 font-black tracking-tighter">LOCAL MODE ACTIVE</div>
-                <div id="debug" class="text-[8px] text-gray-500 font-bold uppercase italic">White Rect Detection</div>
+                <div id="status" class="text-[12px] text-green-400 font-black tracking-tighter">PHYSICAL SCAN ACTIVE</div>
+                <div id="debug" class="text-[8px] text-gray-500 font-bold uppercase italic italic-debug">White Detection</div>
             </div>
-            <div class="text-[8px] text-gray-400 font-bold opacity-50 underline">NO-API v1.0</div>
+            <div class="text-[8px] text-gray-400 font-bold opacity-50 underline">NO-API v1.1</div>
         </div>
     </div>
 
-    <canvas id="shutter-canvas" class="hidden"></canvas>
     <canvas id="processing-canvas" class="hidden"></canvas>
 
     <script>
-        let scanCount = 0;
-        let isProcessing = false;
+        let isProcessing = false; // 連写防止フラグ
         let detectionInterval = null;
+        let whitePixelsCount = 0; // 白ピクセル数をグローバル化
+        let whitePixelsThreshold = 0.05; // 白エリア検知の閾値
+        let history = []; // 撮影履歴を管理
 
         async function startCamera() {
             const container = document.getElementById('camera-placeholder');
@@ -78,8 +81,8 @@
                 container.innerHTML = "";
                 container.appendChild(video);
                 
-                // 【爆速】白い四角検知ループを開始（0.3秒おき）
-                detectionInterval = setInterval(detectWhiteRectangle, 300);
+                // 【爆速】白い四角検知ループを開始（0.2秒おき）
+                detectionInterval = setInterval(detectWhiteRectangle, 200);
             } catch (err) {
                 document.getElementById('msg').innerText = "カメラが使えないみたいだねぇ。";
             }
@@ -93,8 +96,8 @@
 
             const canvas = document.getElementById('processing-canvas');
             const context = canvas.getContext('2d', { willReadFrequently: true });
-            const frameWidth = 160; // 負荷軽減のため極小サイズに
-            const frameHeight = 120;
+            const frameWidth = 100; // 負荷軽減のため極小サイズに
+            const frameHeight = 100;
             canvas.width = frameWidth;
             canvas.height = frameHeight;
             context.drawImage(video, 0, 0, frameWidth, frameHeight);
@@ -103,65 +106,65 @@
             const imageData = context.getImageData(0, 0, frameWidth, frameHeight);
             const data = imageData.data;
             
-            let whitePixelCount = 0;
+            whitePixelsCount = 0;
             const threshold = 180; // 白さの閾値 (0-255)
 
             for (let i = 0; i < data.length; i += 4) {
-                const r = data[i];
-                const g = data[i+1];
-                const b = data[i+2];
-                // 簡易的な白さ判定
-                if (r > threshold && g > threshold && b > threshold) {
-                    whitePixelCount++;
+                if (data[i] > threshold && data[i+1] > threshold && data[i+2] > threshold) {
+                    whitePixelsCount++;
                 }
             }
 
-            // 2. 画面の一定割合（例: 5%〜50%）が「白」なら、レシートとみなす
-            const whiteRatio = whitePixelCount / (frameWidth * frameHeight);
-            const scanFrame = document.getElementById('scan-frame');
-            document.getElementById('debug').innerText = `White Ratio: ${Math.round(whiteRatio * 100)}%`;
+            // 2. 白エリアが一定割合（例: 5%〜50%）を占めたら、レシートとみなす
+            const ratio = whitePixelsCount / 10000;
+            document.getElementById('debug').innerText = `Ratio: ${Math.round(ratio * 100)}%`;
 
-            if (whiteRatio > 0.05 && whiteRatio < 0.6) {
+            if (ratio > whitePixelsThreshold && ratio < 0.6) {
                 // 白い塊を検知！
-                if (!scanFrame.classList.contains('detected')) {
-                    scanFrame.classList.add('detected');
-                    document.getElementById('status').innerText = "TARGET LOCKED!";
-                    // すぐ撮る
-                    setTimeout(() => executeCapture(video), 100); 
+                if (!isProcessing) {
+                    isProcessing = true; // 連写防止開始
+                    document.getElementById('scan-frame').classList.add('detected');
+                    executeCapture(video);
                 }
             } else {
-                scanFrame.classList.remove('detected');
-                document.getElementById('status').innerText = "LOCAL MODE ACTIVE";
+                document.getElementById('scan-frame').classList.remove('detected');
             }
         }
 
         function executeCapture(video) {
-            if (isProcessing) return;
-            isProcessing = true; // 連続撮影を防ぐ
-
-            scanCount++;
             const canvas = document.createElement('canvas'); // 保存用
             canvas.width = video.videoWidth;
             canvas.height = video.videoHeight;
             canvas.getContext('2d').drawImage(video, 0, 0);
-            const imgData = canvas.toDataURL('image/png');
+            const imgData = canvas.toDataURL('image/jpeg', 0.6); // 軽量化
 
+            // 演出
             document.getElementById('camera-container').classList.add('flash');
             setTimeout(() => document.getElementById('camera-container').classList.remove('flash'), 300);
             
-            document.getElementById('msg').innerText = `${scanCount}枚目！白い紙、預かったよ！`;
+            // 履歴に追加
+            history.unshift(imgData); // 先頭に
+            updateHistoryList();
+            
+            document.getElementById('msg').innerText = "預かったよ！はい、次！白い紙を見せな！";
 
-            const list = document.getElementById('history-list');
-            const newCard = document.createElement('div');
-            newCard.className = "min-w-[50px] h-12 bg-gray-700 rounded border border-green-500 overflow-hidden shrink-0 shadow-lg fade-in";
-            newCard.innerHTML = `<img src="${imgData}" class="w-full h-full object-cover">`;
-            list.prepend(newCard);
-
-            // 撮ったら3秒間検知を休む（連写防止）
+            // 3秒休んでから次へ（連写防止）
             setTimeout(() => {
-                isProcessing = false;
-                document.getElementById('msg').innerText = "はい、次！白い紙を見せな！";
+                isProcessing = false; // 連写防止解除
             }, 3000);
+        }
+
+        function updateHistoryList() {
+            const list = document.getElementById('history-list');
+            list.innerHTML = ""; // 一旦クリア
+            
+            // 履歴カードを生成
+            history.forEach(imgData => {
+                const card = document.createElement('div');
+                card.className = "min-w-[50px] h-12 bg-gray-700 rounded border border-green-500 overflow-hidden shrink-0 shadow-lg fade-in";
+                card.innerHTML = `<img src="${imgData}" class="w-full h-full object-cover">`;
+                list.appendChild(card);
+            });
         }
 
         window.onload = startCamera;
