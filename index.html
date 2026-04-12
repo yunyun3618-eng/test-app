@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>爆速レシートおばちゃん（未来対応版）</title>
+    <title>爆速レシートおばちゃん（未来永劫版）</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         .scan-frame { position: absolute; width: 16rem; height: 20rem; border: 4px solid transparent; animation: blink 1.5s infinite; }
@@ -23,35 +23,39 @@
 <body class="bg-gray-900 text-white overflow-hidden font-sans">
 
     <script>
-        // 【設定】APIキーを貼り付け
-        const GEMINI_API_KEY = "AIzaSyBhRkqQT_H3E5H6pItF8_145QZjp1WThsc"; 
-        // 将来 2.0 が出てもここを変えるだけで済むように変数化（基本は latest で自動追従）
-        let MODEL_NAME = "gemini-1.5-flash-latest"; 
+        const GEMINI_API_KEY = "ここに取得したAPIキーを貼り付け"; 
+        
+        // 【総監督仕様】未来のモデルまで含めた優先リスト
+        // 上にあるものほど「最新かつ優先」して使われます
+        const MODEL_PRIORITY = [
+            "gemini-2.0-flash-exp",   // 将来の2.0テスト版
+            "gemini-1.5-flash-latest", // 現在の最新
+            "gemini-1.5-flash"        // 安定版
+        ];
+        let currentModelIndex = 0;
     </script>
 
-    <div class="fixed top-0 left-0 right-0 p-4 flex justify-between items-start z-30 bg-gradient-to-b from-black/70 to-transparent">
-        <div class="flex items-start gap-2 text-gray-800">
-            <div class="text-4xl">👵</div>
-            <div class="bg-white p-2 rounded-lg rounded-tl-none relative shadow-lg max-w-[200px]">
-                <p id="msg" class="text-sm font-bold">最新の「目」を搭載したよ！レシート見せておくれ！</p>
-            </div>
+    <div class="fixed top-0 left-0 right-0 p-4 z-30 bg-gradient-to-b from-black/70 to-transparent flex items-start gap-2">
+        <div class="text-4xl">👵</div>
+        <div class="bg-white p-2 rounded-lg rounded-tl-none relative shadow-lg max-w-[220px] text-gray-800">
+            <p id="msg" class="text-xs font-bold leading-relaxed">最新の知能で見てるよ！<br>レシートを枠に合わせな！</p>
         </div>
     </div>
 
     <div id="camera-container" class="w-full h-screen flex items-center justify-center relative bg-black">
-        <div id="camera-placeholder" class="text-gray-600 text-sm">カメラ起動中...</div>
+        <div id="camera-placeholder" class="text-gray-600 text-xs">カメラを呼び出しているよ...</div>
         <div class="scan-frame z-20 pointer-events-none">
             <div class="scan-frame-inner relative w-full h-full"></div>
         </div>
     </div>
 
     <div class="fixed bottom-0 left-0 right-0 p-4 z-30 bg-gradient-to-t from-black/90 to-transparent">
-        <div id="history-list" class="flex gap-2 overflow-x-auto pb-4 mb-2 no-scrollbar">
-            <div id="history-empty" class="min-w-[80px] h-20 bg-gray-700 rounded border border-gray-500 flex items-center justify-center text-xs text-gray-400 font-bold">履歴なし</div>
+        <div id="history-list" class="flex gap-2 overflow-x-auto pb-4 mb-2 no-scrollbar min-h-[80px]">
+            <div id="history-empty" class="min-w-[80px] h-20 bg-gray-800/50 rounded border border-gray-600 flex items-center justify-center text-[10px] text-gray-500 font-bold uppercase tracking-tighter italic">No History</div>
         </div>
-        <div class="flex justify-between items-center px-2">
-            <div id="status" class="text-[10px] text-green-400 font-mono tracking-widest">SYSTEM READY</div>
-            <div id="model-tag" class="text-[8px] text-gray-500 font-bold uppercase">AUTO-FETCH MODE</div>
+        <div class="flex justify-between items-center px-1">
+            <div id="status" class="text-[10px] text-green-400 font-mono tracking-widest font-bold">SYSTEM ACTIVE</div>
+            <div id="active-model" class="text-[8px] text-gray-500 font-bold uppercase opacity-50">Checking Model...</div>
         </div>
     </div>
 
@@ -79,14 +83,15 @@
                 
                 runLoop();
             } catch (err) {
-                document.getElementById('msg').innerText = "カメラが映らないねぇ。";
+                document.getElementById('msg').innerText = "カメラの許可が必要だよ。";
             }
         }
 
         async function runLoop() {
             while (true) {
                 await aiScanStep();
-                await new Promise(resolve => setTimeout(resolve, 2500)); // スキャン間隔を最適化
+                // 待機時間を3秒にして安定化
+                await new Promise(r => setTimeout(r, 3000));
             }
         }
 
@@ -98,58 +103,58 @@
             if (!video || !video.videoWidth) return;
 
             isProcessing = true;
-            document.getElementById('status').innerText = "SCANNING...";
+            document.getElementById('status').innerText = "AI LOOKING...";
 
             const context = canvas.getContext('2d');
-            canvas.width = 480;
-            canvas.height = 640;
+            canvas.width = 400; // AIが認識しやすいサイズに固定
+            canvas.height = 500;
             context.drawImage(video, 0, 0, canvas.width, canvas.height);
             const base64Image = canvas.toDataURL('image/jpeg', 0.5).split(',')[1];
 
-            try {
-                // モデル名の変数をURLに組み込む
-                const url = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL_NAME}:generateContent?key=${GEMINI_API_KEY}`;
-                
-                const response = await fetch(url, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        contents: [{
-                            parts: [
-                                { text: "Is there a receipt clearly visible in the center? Answer 'YES' or 'NO' only." },
-                                { inline_data: { mime_type: "image/jpeg", data: base64Image } }
-                            ]
-                        }],
-                        generationConfig: { temperature: 0 } // 回答のブレを最小限にする
-                    })
-                });
+            // 優先リストに従ってリトライ
+            for (let i = currentModelIndex; i < MODEL_PRIORITY.length; i++) {
+                const model = MODEL_PRIORITY[i];
+                document.getElementById('active-model').innerText = model;
 
-                const data = await response.json();
-                
-                if (data.error) {
-                    // モデルが見つからない等のエラーなら、フォールバック（予備）を試みる
-                    if (data.error.status === "NOT_FOUND") {
-                        console.warn("Model not found, switching to stable...");
-                        MODEL_NAME = "gemini-1.5-flash"; // 予備の古い安定版名
-                        return;
+                try {
+                    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${GEMINI_API_KEY}`;
+                    const response = await fetch(url, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            contents: [{
+                                parts: [
+                                    { text: "Output 'YES' if a receipt is clearly centered and readable. Otherwise 'NO'. No chat." },
+                                    { inline_data: { mime_type: "image/jpeg", data: base64Image } }
+                                ]
+                            }],
+                            generationConfig: { temperature: 0 }
+                        })
+                    });
+
+                    const data = await response.json();
+
+                    if (data.error) {
+                        // 次のモデルを試す
+                        console.warn(`${model} failed, trying next...`);
+                        continue; 
                     }
-                    throw new Error(data.error.message);
-                }
 
-                const result = data.candidates[0].content.parts[0].text.trim().toUpperCase();
-                document.getElementById('model-tag').innerText = MODEL_NAME;
+                    // 成功したら、次からはこのモデルを優先的に使う
+                    currentModelIndex = i;
+                    const result = data.candidates[0].content.parts[0].text.trim().toUpperCase();
 
-                if (result.includes("YES")) {
-                    executeCapture(video);
-                } else {
-                    document.getElementById('status').innerText = "WAITING...";
+                    if (result.includes("YES")) {
+                        executeCapture(video);
+                    } else {
+                        document.getElementById('status').innerText = "IDLE";
+                    }
+                    break; // 成功したのでループを抜ける
+                } catch (e) {
+                    console.error("Fetch Error:", e);
                 }
-            } catch (err) {
-                console.error("AI Error:", err);
-                document.getElementById('status').innerText = "RETRYING...";
-            } finally {
-                isProcessing = false;
             }
+            isProcessing = false;
         }
 
         function executeCapture(video) {
@@ -164,7 +169,7 @@
             document.getElementById('camera-container').classList.add('flash');
             setTimeout(() => document.getElementById('camera-container').classList.remove('flash'), 500);
             
-            document.getElementById('msg').innerText = `${scanCount}枚目、バッチリだよ！`;
+            document.getElementById('msg').innerText = `${scanCount}枚目！バッチリだよ、あんた！`;
 
             const list = document.getElementById('history-list');
             const empty = document.getElementById('history-empty');
