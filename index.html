@@ -6,42 +6,66 @@
     <title>爆速レシートおばちゃん</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        .blinking-frame { border: 4px solid #4ade80; animation: blink 1.5s infinite; }
+        /* 四隅だけの枠（点滅） */
+        .scan-frame {
+            position: absolute; width: 16rem; height: 20rem; /* w-64, h-80 */
+            border: 4px solid transparent; animation: blink 1.5s infinite;
+        }
+        .scan-frame::before, .scan-frame::after {
+            content: ''; position: absolute; width: 40px; height: 40px; border-color: #4ade80; border-style: solid;
+        }
+        /* 左上と右下 */
+        .scan-frame::before { top: -4px; left: -4px; border-width: 4px 0 0 4px; }
+        .scan-frame::after { bottom: -4px; right: -4px; border-width: 0 4px 4px 0; }
+        /* 右上と左下 */
+        .scan-frame-inner::before, .scan-frame-inner::after {
+            content: ''; position: absolute; width: 40px; height: 40px; border-color: #4ade80; border-style: solid;
+        }
+        .scan-frame-inner::before { top: -4px; right: -4px; border-width: 4px 4px 0 0; }
+        .scan-frame-inner::after { bottom: -4px; left: -4px; border-width: 0 0 4px 4px; }
+
         @keyframes blink { 0% { opacity: 1; } 50% { opacity: 0.3; } 100% { opacity: 1; } }
+        /* 撮影時のフラッシュ */
+        .flash { animation: flashBg 0.5s; }
+        @keyframes flashBg { 0% { background-color: white; } 100% { background-color: black; } }
     </style>
 </head>
 <body class="bg-gray-900 text-white overflow-hidden font-sans">
 
-    <div class="fixed top-0 left-0 right-0 p-4 flex justify-between items-start z-10 bg-gradient-to-b from-black/70 to-transparent text-gray-800">
+    <div class="fixed top-0 left-0 right-0 p-4 flex justify-between items-start z-30 bg-gradient-to-b from-black/70 to-transparent text-gray-800">
         <div class="flex items-start gap-2">
             <div class="text-4xl">👵</div>
             <div class="bg-white p-2 rounded-lg rounded-tl-none relative shadow-lg max-w-[200px]">
-                <p id="msg" class="text-sm font-bold">あんた、レシート見せてごらん！</p>
-                <button class="absolute -top-2 -right-2 bg-gray-400 text-white text-xs rounded-full w-5 h-5">▼</button>
+                <p id="msg" class="text-sm font-bold">あんた、レシートを枠に入れてごらん！</p>
             </div>
         </div>
-        <button class="text-2xl">⚙️</button>
     </div>
 
-    <div class="w-full h-screen flex items-center justify-center relative bg-black">
+    <div id="camera-container" class="w-full h-screen flex items-center justify-center relative bg-black">
         <div id="camera-placeholder" class="text-gray-600">カメラ起動中...</div>
-        <div class="absolute w-64 h-80 blinking-frame rounded-lg pointer-events-none z-20"></div>
+        
+        <div class="scan-frame z-20 pointer-events-none">
+            <div class="scan-frame-inner relative w-full h-full"></div>
+        </div>
     </div>
 
-    <div class="fixed bottom-0 left-0 right-0 p-4 z-10 bg-gradient-to-t from-black/90 to-transparent">
-        <div class="flex gap-2 overflow-x-auto pb-4 mb-2 no-scrollbar">
-            <div class="min-w-[80px] h-20 bg-gray-700 rounded border border-gray-500 flex items-center justify-center text-xs text-gray-400 font-bold">履歴なし</div>
+    <div class="fixed bottom-0 left-0 right-0 p-4 z-30 bg-gradient-to-t from-black/90 to-transparent">
+        <div id="history-list" class="flex gap-2 overflow-x-auto pb-4 mb-2 no-scrollbar">
+            <div id="history-empty" class="min-w-[80px] h-20 bg-gray-700 rounded border border-gray-500 flex items-center justify-center text-xs text-gray-400 font-bold">履歴なし</div>
         </div>
         
         <div class="flex justify-between items-center">
-            <div class="text-xs text-green-400 font-bold">お試し版：残り 5枚</div>
-            <button class="bg-green-500 hover:bg-green-600 text-white px-8 py-3 rounded-full font-bold shadow-xl active:scale-95 transition-all">
-                💾 保存する
+            <div class="text-xs text-green-400 font-bold">自動スキャン：待機中</div>
+            <button class="bg-gray-600 text-gray-300 px-8 py-3 rounded-full font-bold shadow-xl cursor-not-allowed">
+                💾 処理中...
             </button>
         </div>
     </div>
 
     <script>
+        // シャッター音（音源は用意していないので、ここでは無音で処理だけ）
+        const shutterSound = new Audio(); 
+
         async function startCamera() {
             const container = document.getElementById('camera-placeholder');
             try {
@@ -51,21 +75,59 @@
                 });
                 const videoElement = document.createElement('video');
                 videoElement.srcObject = stream;
-                videoElement.setAttribute('playsinline', ''); // iPhone対策
+                videoElement.setAttribute('playsinline', ''); 
                 videoElement.play();
                 videoElement.className = "w-full h-full object-cover";
                 
                 container.innerHTML = "";
                 container.appendChild(videoElement);
-                document.getElementById('msg').innerText = "おっ、いい感じじゃない！";
+                document.getElementById('msg').innerText = "おっ、いい感じ！じっとしててね！";
+
+                // 【自動スキャン・シミュレーション】
+                // 3秒後に「カシャッ」となるようにタイマーを設定
+                setTimeout(autoScan, 3000);
+
             } catch (err) {
-                document.getElementById('msg').innerText = "カメラが映らないねぇ。許可してくれた？";
+                document.getElementById('msg').innerText = "カメラが映らないねぇ。";
             }
         }
 
-        // ページを読み込んだらカメラ開始
+        // 自動スキャンの演出
+        function autoScan() {
+            const cameraContainer = document.getElementById('camera-container');
+            const msg = document.getElementById('msg');
+
+            // 1. おばちゃんが叫ぶ
+            msg.innerText = "よし、撮ったよ！預かるね！";
+
+            // 2. フラッシュ演出
+            cameraContainer.classList.add('flash');
+            setTimeout(() => cameraContainer.classList.remove('flash'), 500);
+
+            // 3. シャッター音（鳴らす処理だけ記述）
+            shutterSound.play().catch(()=>{}); 
+
+            // 4. 履歴にダミーを追加
+            addHistoryDummy();
+        }
+
+        // 履歴エリアに「スキャン中」のカードを足す
+        function addHistoryDummy() {
+            const list = document.getElementById('history-list');
+            const empty = document.getElementById('history-empty');
+
+            if (empty) empty.remove(); // 「履歴なし」を消す
+
+            const newCard = document.createElement('div');
+            newCard.className = "min-w-[80px] h-20 bg-gray-700 rounded border border-green-500 flex flex-col items-center justify-center text-xs text-green-400 font-bold";
+            newCard.innerHTML = `
+                <div>📄</div>
+                <div>スキャン中...</div>
+            `;
+            list.prepend(newCard); // 一番左（最新）に追加
+        }
+
         window.onload = startCamera;
-        // iPhoneなどで自動起動しない場合の予備（画面タップで起動）
         document.body.addEventListener('click', () => {
             if (!document.querySelector('video')) startCamera();
         }, { once: true });
