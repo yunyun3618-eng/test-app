@@ -28,6 +28,10 @@
         /* 撮影時のフラッシュ */
         .flash { animation: flashBg 0.5s; }
         @keyframes flashBg { 0% { background-color: white; } 100% { background-color: black; } }
+
+        /* 履歴画像のフェードイン */
+        .fade-in { animation: fadeIn 0.5s; }
+        @keyframes fadeIn { 0% { opacity: 0; transform: translateY(10px); } 100% { opacity: 1; transform: translateY(0); } }
     </style>
 </head>
 <body class="bg-gray-900 text-white overflow-hidden font-sans">
@@ -55,16 +59,18 @@
         </div>
         
         <div class="flex justify-between items-center">
-            <div class="text-xs text-green-400 font-bold">自動スキャン：待機中</div>
+            <div id="status" class="text-xs text-green-400 font-bold">自動スキャン：待機中</div>
             <button class="bg-gray-600 text-gray-300 px-8 py-3 rounded-full font-bold shadow-xl cursor-not-allowed">
                 💾 処理中...
             </button>
         </div>
     </div>
 
+    <canvas id="shutter-canvas" class="hidden"></canvas>
+
     <script>
-        // シャッター音（音源は用意していないので、ここでは無音で処理だけ）
-        const shutterSound = new Audio(); 
+        let scanCount = 0; // 何枚目かを数えるカウンター
+        let scanTimer = null; // ループ用のタイマー
 
         async function startCamera() {
             const container = document.getElementById('camera-placeholder');
@@ -74,6 +80,7 @@
                     audio: false 
                 });
                 const videoElement = document.createElement('video');
+                videoElement.id = 'camera-video'; // IDを追加
                 videoElement.srcObject = stream;
                 videoElement.setAttribute('playsinline', ''); 
                 videoElement.play();
@@ -82,47 +89,78 @@
                 container.innerHTML = "";
                 container.appendChild(videoElement);
                 document.getElementById('msg').innerText = "おっ、いい感じ！じっとしててね！";
+                document.getElementById('status').innerText = "自動スキャン：準備完了";
 
-                // 【自動スキャン・シミュレーション】
-                // 3秒後に「カシャッ」となるようにタイマーを設定
-                setTimeout(autoScan, 3000);
+                // 【爆速連写ループ・スタート】
+                // 3秒後に1枚目を撮る
+                scanTimer = setTimeout(autoScanLoop, 3000);
 
             } catch (err) {
                 document.getElementById('msg').innerText = "カメラが映らないねぇ。";
             }
         }
 
-        // 自動スキャンの演出
-        function autoScan() {
-            const cameraContainer = document.getElementById('camera-container');
-            const msg = document.getElementById('msg');
+        // 自動スキャンの連写ループ
+        function autoScanLoop() {
+            const video = document.getElementById('camera-video');
+            if (!video) return; // カメラが動いていなければ中止
+
+            scanCount++; // 枚数を＋1
 
             // 1. おばちゃんが叫ぶ
-            msg.innerText = "よし、撮ったよ！預かるね！";
+            const msgs = [
+                `${scanCount}枚目、預かったよ！`,
+                `はい、${scanCount}枚目！じっとして！`,
+                `どんどん持っておいで！${scanCount}枚目！`,
+                `よし、${scanCount}枚目完了！`
+            ];
+            // 枚数に合わせてセリフを変える（配列の数でループさせる）
+            document.getElementById('msg').innerText = msgs[(scanCount - 1) % msgs.length];
+            document.getElementById('status').innerText = `自動スキャン：${scanCount}枚目を処理中...`;
 
-            // 2. フラッシュ演出
+            // 2. 本当に写真を撮って履歴に入れる
+            takePhotoAndAddToHistory(video);
+
+            // 3. フラッシュ演出
+            const cameraContainer = document.getElementById('camera-container');
             cameraContainer.classList.add('flash');
-            setTimeout(() => cameraContainer.classList.remove('flash'), 500);
+            setTimeout(() => {
+                cameraContainer.classList.remove('flash');
+                document.getElementById('status').innerText = `自動スキャン：待機中`;
+            }, 500);
 
-            // 3. シャッター音（鳴らす処理だけ記述）
-            shutterSound.play().catch(()=>{}); 
-
-            // 4. 履歴にダミーを追加
-            addHistoryDummy();
+            // 4. 【爆速ループ】3秒後にまた自分自身（この関数）を呼び出す
+            scanTimer = setTimeout(autoScanLoop, 3000);
         }
 
-        // 履歴エリアに「スキャン中」のカードを足す
-        function addHistoryDummy() {
+        // カメラ映像を画像にして履歴に足す魔法
+        function takePhotoAndAddToHistory(video) {
+            const canvas = document.getElementById('shutter-canvas');
+            const context = canvas.getContext('2d');
+
+            // キャンバスのサイズをビデオに合わせる（ここが写真になる）
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+
+            // ビデの一瞬をキャンバスに「描画」する
+            context.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+            // キャンバスから「画像データURL」を取り出す（これが本物の写真データ）
+            const imageDataUrl = canvas.toDataURL('image/png');
+
+            // 履歴エリアに画像付きカードを足す
             const list = document.getElementById('history-list');
             const empty = document.getElementById('history-empty');
 
             if (empty) empty.remove(); // 「履歴なし」を消す
 
+            // 新しいプレビューカード（本物の画像付き）を作る
             const newCard = document.createElement('div');
-            newCard.className = "min-w-[80px] h-20 bg-gray-700 rounded border border-green-500 flex flex-col items-center justify-center text-xs text-green-400 font-bold";
+            newCard.className = "min-w-[80px] h-20 bg-gray-700 rounded border border-green-500 overflow-hidden text-xs text-green-400 font-bold fade-in";
+            
+            // カードの中身に本物の画像（imageDataUrl）を入れる
             newCard.innerHTML = `
-                <div>📄</div>
-                <div>スキャン中...</div>
+                <img src="${imageDataUrl}" class="w-full h-full object-cover">
             `;
             list.prepend(newCard); // 一番左（最新）に追加
         }
