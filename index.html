@@ -6,7 +6,7 @@
     <title>TaxHelper Pro v2.7.0</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        /* 中央十字照準（縁取りあり） */
+        /* --- 既存スタイル（維持） --- */
         .crosshair {
             position: absolute;
             top: 50%; left: 50%;
@@ -25,15 +25,23 @@
         @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.2; } }
         .blinking { animation: blink 1.2s infinite; }
 
-        /* プレビュー：HUD */
-        #preview-overlay { position: fixed; inset: 0; z-index: 100; display: none; background: rgba(0,0,0,0.9); }
+        /* 修正：プレビュー背景でブラウザのズームを阻止 */
+        #preview-overlay { 
+            position: fixed; inset: 0; z-index: 100; display: none; background: rgba(0,0,0,0.9); 
+            touch-action: none; /* ブラウザ標準のズーム・スクロールを無効化 */
+        }
         
-        /* 修正：ズーム干渉防止のためのコンテナ */
+        /* 修正：画像表示エリア（ズームしてもフォームを隠さない） */
         .preview-viewport {
             position: absolute; inset: 0;
             display: flex; items-center; justify-content: center;
-            overflow: hidden; /* 子要素のズームをここに閉じ込める */
-            padding-bottom: 320px; /* HUDパネルと被らないように調整 */
+            overflow: hidden; /* はみ出た画像を隠す */
+            padding-bottom: 320px; /* 下の入力フォーム用のスペース */
+        }
+
+        #preview-img {
+            transition: transform 0.05s linear; /* 追従性を高めるため短めに設定 */
+            will-change: transform;
         }
 
         #hud-panel {
@@ -42,7 +50,6 @@
             border: 1px solid rgba(255,255,255,0.1); border-radius: 24px; padding: 20px; z-index: 110;
         }
 
-        /* AIメッセージボックス（最初から表示） */
         #msg-box { 
             background: rgba(255, 255, 255, 0.98); 
             color: #111; 
@@ -52,7 +59,6 @@
         }
         .minimized { height: 0; padding: 0 !important; overflow: hidden; border: none !important; margin: 0 !important; opacity: 0; }
         
-        /* 報告用大型モード */
         .report-mode {
             position: fixed !important;
             inset: 20% 5% auto 5% !important;
@@ -63,7 +69,6 @@
             transform: scale(1.05);
         }
 
-        /* 履歴カード */
         #history-list { flex: 1; display: flex; gap: 10px; overflow-x: auto; padding: 5px; -webkit-overflow-scrolling: touch; }
         .history-card { width: 70px; height: 90px; background: #2d3748; border-radius: 12px; border: 2px solid #10b981; overflow: hidden; flex-shrink: 0; }
         .history-card img { width: 100%; height: 100%; object-fit: cover; }
@@ -85,8 +90,7 @@
             <input type="text" id="edit-date" class="bg-white/10 border border-white/20 rounded-lg p-3 text-white">
             <input type="text" id="edit-shop" class="bg-white/10 border border-white/20 rounded-lg p-3 text-white" placeholder="店名">
         </div>
-        <div id="edit-items-area" class="space-y-2 max-h-32 overflow-y-auto bg-black/20 p-2 rounded-lg">
-            </div>
+        <div id="edit-items-area" class="space-y-2 max-h-32 overflow-y-auto bg-black/20 p-2 rounded-lg"></div>
         <div class="relative">
             <span class="absolute left-4 top-3 text-blue-400 text-2xl font-bold">¥</span>
             <input type="number" id="edit-amount" class="w-full bg-black/40 border border-white/20 rounded-xl py-4 pl-12 text-4xl font-mono text-blue-400 outline-none">
@@ -137,10 +141,19 @@ let audioCtx;
 let stabilityCounter = 0;
 const STABILITY_THRESHOLD = 3;
 
-// 修正：OS切り替え時のエラー検知
+// --- 修正：画像ズーム用の内部変数 ---
+let scale = 1, lastScale = 1, startDist = 0;
+let posX = 0, posY = 0, startX = 0, startY = 0;
+
+// --- 修正：ブラウザ離脱・復帰時の挙動 ---
 window.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'hidden') {
-        pauseScanner();
+        isPaused = true;
+        isProcessing = true; 
+        document.getElementById('crosshair').classList.remove('blinking');
+    } else {
+        pauseScanner(); // 明示的に「停止中」にしてエラー画面代わりにする
+        updateAIChat("【通信中断】スキャンを一度停止しました。再開ボタンを押してください。");
     }
 });
 
@@ -149,6 +162,7 @@ async function startApp() {
     document.getElementById('ready-screen').style.display = 'none';
     await initCamera();
     resumeScanner();
+    initZoomEvents(); // ズームイベント初期化
 }
 
 function setSpeedMode(s) {
@@ -173,7 +187,7 @@ function updateAIChat(text, isReport = false) {
 
 function pauseScanner() { 
     isPaused = true; 
-    isProcessing = false; 
+    isProcessing = true; // 物理ロック
     document.getElementById('crosshair').classList.remove('blinking'); 
     
     if (historyData.length > 0) {
@@ -195,18 +209,19 @@ function resumeScanner() {
 async function initCamera() {
     try {
         const s = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment", width: { ideal: 1280 } } });
-        
-        // 修正：カメラ切断時のエラー対応
-        s.getVideoTracks()[0].onended = () => {
-            updateAIChat("カメラ接続が切れました。ページを再読み込みしてください。", true);
-        };
+        s.getVideoTracks()[0].addEventListener('ended', () => {
+            updateAIChat("【エラー】カメラが中断されました。再読み込みしてください。", true);
+        });
 
         videoEl = document.createElement('video'); videoEl.srcObject = s; videoEl.setAttribute('playsinline', ''); videoEl.play();
         videoEl.className = "w-full h-full object-cover"; document.getElementById('camera-container').prepend(videoEl);
+        
         setInterval(() => {
-            if(!isPaused) detect(videoEl);
+            if(!isPaused && !isProcessing) detect(videoEl);
         }, 250);
-    } catch (e) { alert("Camera Error: カメラの権限を確認してください"); }
+    } catch (e) { 
+        updateAIChat("【エラー】カメラを起動できませんでした。", true);
+    }
 }
 
 function detect(v) {
@@ -240,7 +255,7 @@ function detect(v) {
 }
 
 function playBeepAndCapture(v) {
-    if(!audioCtx || isProcessing) return;
+    if(!audioCtx || isProcessing || isPaused) return;
     isProcessing = true;
 
     const o = audioCtx.createOscillator(); const g = audioCtx.createGain();
@@ -270,39 +285,69 @@ function playBeepAndCapture(v) {
     }
 }
 
-// 修正：プレビュー中は確実にisPausedをtrueにする
+// --- 修正：独自ズーム制御（ページ全体の拡大を防ぐ） ---
+function updateTransform() {
+    const img = document.getElementById('preview-img');
+    img.style.transform = `translate(${posX}px, ${posY}px) scale(${scale})`;
+}
+
+function initZoomEvents() {
+    const overlay = document.getElementById('preview-overlay');
+    overlay.addEventListener('touchstart', (e) => {
+        if (e.touches.length === 2) {
+            startDist = Math.hypot(e.touches[0].pageX - e.touches[1].pageX, e.touches[0].pageY - e.touches[1].pageY);
+            lastScale = scale;
+        } else if (e.touches.length === 1) {
+            startX = e.touches[0].pageX - posX;
+            startY = e.touches[0].pageY - posY;
+        }
+    }, {passive: false});
+
+    overlay.addEventListener('touchmove', (e) => {
+        e.preventDefault(); // これがページ全体のズームを阻止する
+        if (e.touches.length === 2) {
+            const dist = Math.hypot(e.touches[0].pageX - e.touches[1].pageX, e.touches[0].pageY - e.touches[1].pageY);
+            scale = Math.min(Math.max(1, lastScale * (dist / startDist)), 4);
+        } else if (e.touches.length === 1) {
+            posX = e.touches[0].pageX - startX;
+            posY = e.touches[0].pageY - startY;
+        }
+        updateTransform();
+    }, {passive: false});
+}
+
 function openPreview(i) {
     currentIndex = i;
-    isPaused = true; // 解析ストップ
-    isProcessing = true; // 重複撮影防止
-    
+    isPaused = true; 
+    isProcessing = true; 
     document.getElementById('crosshair').classList.remove('blinking');
     
-    const it = historyData[i]; document.getElementById('preview-img').src = it.img;
-    document.getElementById('edit-date').value = it.date; document.getElementById('edit-shop').value = it.shop;
+    // 画像座標リセット
+    scale = 1; posX = 0; posY = 0;
+    updateTransform();
+    
+    const it = historyData[i]; 
+    document.getElementById('preview-img').src = it.img;
+    document.getElementById('edit-date').value = it.date; 
+    document.getElementById('edit-shop').value = it.shop;
     document.getElementById('edit-amount').value = it.amount;
     
     const area = document.getElementById('edit-items-area');
     area.innerHTML = it.items.length ? "" : "<p class='text-gray-400 text-center italic'>項目未解析</p>";
-    
     document.getElementById('preview-overlay').style.display = 'block';
 }
 
 function closePreview(save) {
     if (save && currentIndex !== -1) {
         const it = historyData[currentIndex];
-        it.date = document.getElementById('edit-date').value; it.shop = document.getElementById('edit-shop').value;
+        it.date = document.getElementById('edit-date').value; 
+        it.shop = document.getElementById('edit-shop').value;
         it.amount = document.getElementById('edit-amount').value;
         updateHistoryUI();
     }
     document.getElementById('preview-overlay').style.display = 'none';
     
-    // 修正：少し待ってからスキャン再開
-    setTimeout(() => { 
-        isPaused = false; 
-        isProcessing = false; 
-        document.getElementById('crosshair').classList.add('blinking');
-    }, 1000);
+    // 単体スキャンの場合は再開ボタンを押すまで待機（自動再開はさせない）
 }
 
 function updateHistoryUI() {
