@@ -3,31 +3,31 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>爆速レシートおばちゃん（UI改善版）</title>
+    <title>爆速レシートおばちゃん（枠・完全回避版）</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        /* 枠の設定：下側(bottom)を25%空けて、操作系と被らないように */
+        /* 枠の設定：履歴カードに絶対被らないよう、下(bottom)を35%まで大胆に空ける */
         .scan-area { 
             position: absolute; 
-            top: 10%; bottom: 25%; left: 10%; right: 10%;
+            top: 10%; bottom: 35%; left: 10%; right: 10%;
             z-index: 20;
         }
-        /* 四隅のデザイン：borderを透明にし、擬似要素だけでカギ括弧を作る */
-        .corner { position: absolute; width: 40px; height: 40px; border-color: rgba(74, 222, 128, 0.3); border-style: solid; transition: border-color 0.2s; }
+        /* 真の「四隅だけ」：L字をよりハッキリ、かつ短く */
+        .corner { position: absolute; width: 30px; height: 30px; border-color: rgba(74, 222, 128, 0.3); border-style: solid; transition: border-color 0.2s; }
         .top-left { top: 0; left: 0; border-width: 6px 0 0 6px; }
         .top-right { top: 0; right: 0; border-width: 6px 6px 0 0; }
         .bottom-left { bottom: 0; left: 0; border-width: 0 0 6px 6px; }
         .bottom-right { bottom: 0; right: 0; border-width: 0 6px 6px 0; }
 
         /* 検知時の色替え */
-        .detected .corner { border-color: rgba(74, 222, 128, 1); filter: drop-shadow(0 0 8px rgba(74, 222, 128, 0.8)); }
+        .detected .corner { border-color: rgba(74, 222, 128, 1); filter: drop-shadow(0 0 10px rgba(74, 222, 128, 0.8)); }
         
-        /* 履歴リストのカスタマイズ */
         .no-scrollbar::-webkit-scrollbar { display: none; }
         .history-card { 
-            min-width: 70px; width: 70px; height: 90px; 
-            background: #374151; border-radius: 6px; border: 2px solid #10b981;
-            overflow: hidden; flex-shrink: 0; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.3);
+            min-width: 65px; width: 65px; height: 85px; 
+            background: rgba(55, 65, 81, 0.8); border-radius: 4px; border: 1.5px solid #10b981;
+            overflow: hidden; flex-shrink: 0; box-shadow: 0 4px 6px rgba(0,0,0,0.4);
+            backdrop-filter: blur(4px);
         }
 
         @keyframes flash { 0% { background: white; } 100% { background: transparent; } }
@@ -38,8 +38,8 @@
 
     <div class="fixed top-0 left-0 right-0 p-4 z-50 bg-gradient-to-b from-black/80 to-transparent flex items-start gap-2">
         <div class="text-4xl">👵</div>
-        <div class="bg-white p-2 rounded-lg rounded-tl-none shadow-xl max-w-[240px] text-gray-800">
-            <p id="msg" class="text-xs font-bold leading-tight">よし、枠をぐいっと上げたよ！<br>角に合わせる感じで置いてごらん！</p>
+        <div class="bg-white p-2 rounded-lg rounded-tl-none shadow-xl max-w-[240px] text-gray-800 border-2 border-green-500">
+            <p id="msg" class="text-xs font-bold leading-tight">よし、枠の下側をぐいっと高くしたよ！<br>これで履歴カードにも邪魔されないはずさ！</p>
         </div>
     </div>
 
@@ -54,17 +54,17 @@
         </div>
     </div>
 
-    <div class="fixed bottom-0 left-0 right-0 z-40 bg-gradient-to-t from-black via-black/80 to-transparent pt-10 pb-6 px-4">
-        <div id="history-list" class="flex gap-3 overflow-x-auto no-scrollbar mb-4 min-h-[90px] items-end">
-            <div class="text-[8px] text-gray-600 font-bold uppercase py-8">No History</div>
+    <div class="fixed bottom-0 left-0 right-0 z-40 bg-gradient-to-t from-black via-black/90 to-transparent pt-12 pb-6 px-4">
+        <div id="history-list" class="flex gap-2 overflow-x-auto no-scrollbar mb-4 min-h-[85px] items-end">
+            <div class="text-[8px] text-gray-700 font-bold py-8">NO DATA</div>
         </div>
         
-        <div class="flex justify-between items-end border-t border-gray-800 pt-2">
+        <div class="flex justify-between items-end border-t border-gray-800 pt-2 px-1">
             <div>
-                <div id="status" class="text-[12px] text-green-400 font-black tracking-tighter">PHYSICAL SCAN MODE</div>
-                <div id="debug" class="text-[8px] text-gray-500 font-mono italic">Ready...</div>
+                <div id="status" class="text-[10px] text-green-400 font-black tracking-widest uppercase">Target Scanning</div>
+                <div id="debug" class="text-[8px] text-gray-600 font-mono">Sens: 0.06 / Ratio: --</div>
             </div>
-            <div class="text-[8px] text-gray-500 font-bold opacity-30">UI-FIX v1.2</div>
+            <div class="text-[8px] text-gray-600 font-bold opacity-40">UI-REFINE v1.3</div>
         </div>
     </div>
 
@@ -73,6 +73,7 @@
     <script>
         let isProcessing = false;
         let scanCount = 0;
+        let history = [];
 
         async function init() {
             try {
@@ -86,7 +87,6 @@
                 video.className = "w-full h-full object-cover";
                 document.getElementById('placeholder').replaceWith(video);
                 
-                // 検知ループ
                 setInterval(() => detect(video), 250);
             } catch (e) { document.getElementById('msg').innerText = "カメラ、出しておくれよ。"; }
         }
@@ -107,7 +107,7 @@
 
             const ratio = whiteCount / 10000;
             const frame = document.getElementById('scan-frame');
-            document.getElementById('debug').innerText = `WHITE: ${Math.round(ratio * 100)}%`;
+            document.getElementById('debug').innerText = `Sens: 0.06 / Ratio: ${Math.round(ratio * 100)}%`;
 
             if (ratio > 0.06 && ratio < 0.65) {
                 frame.classList.add('detected');
@@ -127,24 +127,26 @@
             saveCanvas.getContext('2d').drawImage(video, 0, 0);
             const dataUrl = saveCanvas.toDataURL('image/jpeg', 0.5);
 
-            // フラッシュ
             const container = document.getElementById('camera-container');
             container.classList.add('flash-active');
             setTimeout(() => container.classList.remove('flash-active'), 300);
 
-            // 履歴追加
-            const list = document.getElementById('history-list');
-            if (scanCount === 1) list.innerHTML = ""; // 初回にメッセージ消去
-            
-            const card = document.createElement('div');
-            card.className = "history-card flex-none animate-bounce-short";
-            card.innerHTML = `<img src="${dataUrl}" class="w-full h-full object-cover">`;
-            list.prepend(card); // 新しい順に左から
+            history.unshift(dataUrl);
+            updateList();
 
-            document.getElementById('msg').innerText = `${scanCount}枚目！次もどんどんおくれ！`;
-
-            // 3秒後に次の検知を許可
+            document.getElementById('msg').innerText = `${scanCount}枚目！バッチリ撮れたよ！`;
             setTimeout(() => { isProcessing = false; }, 3000);
+        }
+
+        function updateList() {
+            const list = document.getElementById('history-list');
+            list.innerHTML = "";
+            history.forEach(data => {
+                const card = document.createElement('div');
+                card.className = "history-card flex-none";
+                card.innerHTML = `<img src="${data}" class="w-full h-full object-cover">`;
+                list.appendChild(card);
+            });
         }
 
         window.onload = init;
