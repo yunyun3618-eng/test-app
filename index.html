@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>TaxHelper Pro v2.7.5</title>
+    <title>TaxHelper Pro v2.7.6</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         /* 中央十字照準（縁取りあり） */
@@ -24,6 +24,23 @@
 
         @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.2; } }
         .blinking { animation: blink 1.2s infinite; }
+
+        /* ボタン強調用の回転アニメーション */
+        @keyframes rotate-glow {
+            0% { transform: rotate(0deg); border-color: transparent transparent currentcolor currentcolor; }
+            100% { transform: rotate(360deg); border-color: transparent transparent currentcolor currentcolor; }
+        }
+        .active-glow {
+            position: relative;
+        }
+        .active-glow::after {
+            content: ''; position: absolute; inset: -4px;
+            border: 3px solid; border-radius: 9999px;
+            animation: rotate-glow 1.5s linear infinite;
+            pointer-events: none;
+        }
+        .glow-blue::after { color: #3b82f6; }
+        .glow-red::after { color: #ef4444; }
 
         /* プレビュー：HUD */
         #preview-overlay { 
@@ -62,16 +79,6 @@
         }
         .minimized { height: 0; padding: 0 !important; overflow: hidden; border: none !important; margin: 0 !important; opacity: 0; }
         
-        .report-mode {
-            position: fixed !important;
-            inset: 20% 5% auto 5% !important;
-            z-index: 200 !important;
-            padding: 24px !important;
-            border: 2px solid #10b981 !important;
-            border-radius: 24px !important;
-            transform: scale(1.05);
-        }
-
         #history-list { flex: 1; display: flex; gap: 10px; overflow-x: auto; padding: 5px; -webkit-overflow-scrolling: touch; }
         .history-card { width: 70px; height: 90px; background: #2d3748; border-radius: 12px; border: 2px solid #10b981; overflow: hidden; flex-shrink: 0; }
         .history-card img { width: 100%; height: 100%; object-fit: cover; }
@@ -106,15 +113,17 @@
 </div>
 
 <div class="fixed top-0 left-0 right-0 p-4 z-50 flex items-start justify-between pointer-events-none">
-    <div class="flex flex-col gap-2 pointer-events-auto">
+    <div class="flex flex-col gap-4 pointer-events-auto">
         <div id="msg-box" class="p-3 rounded-lg font-bold transition-all">
             <p id="msg" class="leading-tight text-[11px]">準備完了！レシートを十字に合わせてね。</p>
         </div>
-        <div class="flex gap-2">
+        <div class="flex gap-4 items-center">
             <button onclick="toggleMsg()" class="bg-black/60 p-2.5 rounded-full border border-white/20">▼</button>
-            <div id="main-controls" class="flex gap-2">
-                <button onclick="resumeScanner()" class="bg-green-600/90 px-5 py-1.5 rounded-full text-[10px] font-bold">▶ 再生</button>
-                <button onclick="pauseScanner()" class="bg-red-600/90 px-5 py-1.5 rounded-full text-[10px] font-bold">■ 停止</button>
+            <div id="btn-resume-wrap" class="relative">
+                <button onclick="resumeScanner()" class="bg-green-600/90 px-6 py-2 rounded-full text-[10px] font-bold">▶ 再生</button>
+            </div>
+            <div id="btn-pause-wrap" class="relative">
+                <button onclick="pauseScanner()" class="bg-red-600/90 px-6 py-2 rounded-full text-[10px] font-bold">■ 停止</button>
             </div>
         </div>
         <div class="flex bg-black/60 p-1 rounded-full border border-white/20 w-fit">
@@ -144,22 +153,19 @@ let isProcessing = false, isPaused = true, historyData = [], currentIndex = -1, 
 let speedMode = false, audioCtx, stabilityCounter = 0;
 const STABILITY_THRESHOLD = 5;
 
-// --- ズーム・移動用 ---
 let scale = 1, lastScale = 1, startDist = 0, posX = 0, posY = 0, startX = 0, startY = 0;
 
-// --- 【修正：1点目】ブラウザ離脱・復帰時の残留ガード ---
 window.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'hidden') {
         if (historyData.length > 0) localStorage.setItem('taxhelper_backup', JSON.stringify(historyData));
         isPaused = true; isProcessing = true;
-        document.getElementById('crosshair').classList.remove('blinking');
+        updateUIState();
     } else {
         isPaused = true; isProcessing = true;
-        document.getElementById('crosshair').classList.remove('blinking');
-        updateAIChat("【接続リセット】カメラを再起動する必要があるよ。", true);
-        const ctrl = document.getElementById('main-controls');
+        updateAIChat("【接続リセット】カメラを再起動してね。", true);
+        const ctrl = document.getElementById('btn-resume-wrap');
         if (ctrl) {
-            ctrl.innerHTML = `<button onclick="location.href=location.pathname+'?recover=1'" class="bg-blue-600 px-8 py-2 rounded-full text-[10px] font-bold shadow-xl animate-bounce pointer-events-auto">🔄 データを保持して再起動</button>`;
+            ctrl.innerHTML = `<button onclick="location.href=location.pathname+'?recover=1'" class="bg-blue-600 px-8 py-2 rounded-full text-[10px] font-bold shadow-xl animate-bounce pointer-events-auto">🔄 再起動</button>`;
         }
     }
 });
@@ -169,12 +175,11 @@ async function preInitCamera() {
         const s = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment", width: { ideal: 1280 } } });
         videoEl = document.createElement('video'); videoEl.srcObject = s; videoEl.setAttribute('playsinline', ''); videoEl.play();
         videoEl.className = "w-full h-full object-cover"; document.getElementById('camera-container').prepend(videoEl);
-        setInterval(() => { if(!isPaused && !isProcessing && videoEl.readyState === 4) detect(videoEl); }, 250);
+        setInterval(() => { if(!isPaused && videoEl.readyState === 4) detect(videoEl); }, 250);
     } catch (e) { console.error("Pre-camera failed", e); }
 }
 
 async function startApp() {
-    // URLに ?recover=1 がある時だけ localStorage から復旧
     const urlParams = new URLSearchParams(window.location.search);
     if (urlParams.get('recover') === '1') {
         const backup = localStorage.getItem('taxhelper_backup');
@@ -183,48 +188,54 @@ async function startApp() {
             localStorage.removeItem('taxhelper_backup');
         }
     } else {
-        localStorage.removeItem('taxhelper_backup'); // 通常起動時は掃除
+        // 通常起動時は残留データを徹底掃除
+        localStorage.clear();
+        historyData = [];
     }
 
     audioCtx = new (window.AudioContext || window.webkitAudioContext)();
     document.getElementById('ready-screen').style.display = 'none';
     if (!videoEl) await preInitCamera();
     
-    if (historyData.length > 0) {
-        updateHistoryUI();
-        updateAIChat("おかえり！さっき撮った" + historyData.length + "枚はちゃんと取っておいたよ。");
-    }
+    updateHistoryUI();
     resumeScanner();
     initZoomEvents();
 }
 
-function setSpeedMode(s) {
-    speedMode = s;
-    document.getElementById('mode-speed').className = s ? "px-4 py-1 rounded-full text-[9px] font-bold bg-green-600" : "px-4 py-1 rounded-full text-[9px] font-bold";
-    document.getElementById('mode-normal').className = !s ? "px-4 py-1 rounded-full text-[9px] font-bold bg-blue-600" : "px-4 py-1 rounded-full text-[9px] font-bold";
-}
+function updateUIState() {
+    const cross = document.getElementById('crosshair');
+    const rWrap = document.getElementById('btn-resume-wrap');
+    const pWrap = document.getElementById('btn-pause-wrap');
 
-function updateAIChat(text, isReport = false) {
-    const box = document.getElementById('msg-box');
-    document.getElementById('msg').innerText = text;
-    if (isReport) box.classList.add('report-mode'); else box.classList.remove('report-mode');
-}
-
-function pauseScanner() { 
-    isPaused = true; isProcessing = true;
-    document.getElementById('crosshair').classList.remove('blinking'); 
-    updateAIChat(historyData.length > 0 ? `お疲れ様！${historyData.length}件読み取ったよ。内容を確認してね。` : "一時停止中だよ。", historyData.length > 0);
+    if (isPaused) {
+        cross.classList.remove('blinking');
+        rWrap.classList.remove('active-glow', 'glow-blue');
+        pWrap.classList.add('active-glow', 'glow-red');
+    } else {
+        cross.classList.add('blinking');
+        rWrap.classList.add('active-glow', 'glow-blue');
+        pWrap.classList.remove('active-glow', 'glow-red');
+    }
 }
 
 function resumeScanner() { 
-    isPaused = false; isProcessing = false;
+    isPaused = false; 
+    isProcessing = false; // 再生ボタンは「待機」に戻す役目
     updateAIChat("スキャン待機中... 十字に合わせてね。");
-    document.getElementById('crosshair').classList.add('blinking'); 
+    updateUIState();
 }
 
-// --- 【修正：2点目・3点目】タイマー廃止、状態ロックとチャット指示 ---
+function pauseScanner() { 
+    isPaused = true; 
+    isProcessing = true;
+    updateAIChat("一時停止中だよ。");
+    updateUIState();
+}
+
 function detect(v) {
-    if (isProcessing || isPaused || !v.videoWidth) return;
+    // 停止中は何もしない
+    if (isPaused) return;
+
     const c = document.getElementById('proc-canvas'); 
     const ctx = c.getContext('2d'); ctx.drawImage(v, 0, 0, 100, 100);
     const p = ctx.getImageData(0, 0, 100, 100).data; 
@@ -232,14 +243,17 @@ function detect(v) {
     for (let i = 0; i < p.length; i += 4) { if (p[i] > 185 && p[i+1] > 185 && p[i+2] > 185) white++; }
     const ratio = white / 10000;
     
-    // ロック解除条件：白い面積が一定以下（どけたと判断）
-    if (isProcessing && ratio < 0.08) {
-        isProcessing = false;
-        document.getElementById('crosshair').classList.add('blinking');
-        updateAIChat("スキャン待機中... 次をどうぞ！");
+    // ロック中（どける待ち）の判定
+    if (isProcessing) {
+        if (ratio < 0.12) { // 閾値を少し緩めて「どけた」と判定しやすく
+            isProcessing = false;
+            updateAIChat("スキャン待機中... 次をどうぞ！");
+        }
+        return;
     }
 
-    if (!isProcessing && ratio > 0.15 && ratio < 0.50) {
+    // スキャン判定
+    if (ratio > 0.15 && ratio < 0.50) {
         stabilityCounter++;
         if (stabilityCounter === 1) updateAIChat("そのまま止めて！ピントを合わせてるよ...");
         if (stabilityCounter >= STABILITY_THRESHOLD) {
@@ -253,8 +267,7 @@ function detect(v) {
 
 function playBeepAndCapture(v) {
     if(!audioCtx || isProcessing || isPaused) return;
-    isProcessing = true; // 撮影した瞬間にロック
-    document.getElementById('crosshair').classList.remove('blinking');
+    isProcessing = true; 
 
     const o = audioCtx.createOscillator(); const g = audioCtx.createGain();
     o.type = 'sine'; o.frequency.setValueAtTime(880, audioCtx.currentTime);
@@ -268,15 +281,33 @@ function playBeepAndCapture(v) {
     updateHistoryUI();
 
     if (!speedMode) {
-        openPreview(0); // プレビュー中もロック継続
+        openPreview(0);
     } else {
         updateAIChat("バッチリ！一度レシートを退けてね。");
     }
 }
 
+function closePreview(save) {
+    if (!save && currentIndex !== -1) {
+        // 破棄：配列の先頭から削除
+        historyData.splice(currentIndex, 1);
+        updateHistoryUI();
+    } else if (save && currentIndex !== -1) {
+        const it = historyData[currentIndex];
+        it.date = document.getElementById('edit-date').value; 
+        it.shop = document.getElementById('edit-shop').value;
+        it.amount = document.getElementById('edit-amount').value;
+        updateHistoryUI();
+    }
+    document.getElementById('preview-overlay').style.display = 'none';
+    
+    if (!isPaused) { 
+        updateAIChat("一度レシートを退けてね。");
+    }
+}
+
 function openPreview(i) {
     currentIndex = i; isProcessing = true;
-    document.getElementById('crosshair').classList.remove('blinking');
     updateAIChat("内容を確認してね。");
     scale = 1; posX = 0; posY = 0; updateTransform();
     const it = historyData[i]; 
@@ -288,19 +319,13 @@ function openPreview(i) {
     document.getElementById('preview-overlay').style.display = 'block';
 }
 
-function closePreview(save) {
-    if (save && currentIndex !== -1) {
-        const it = historyData[currentIndex];
-        it.date = document.getElementById('edit-date').value; it.shop = document.getElementById('edit-shop').value;
-        it.amount = document.getElementById('edit-amount').value;
-        updateHistoryUI();
-    }
-    document.getElementById('preview-overlay').style.display = 'none';
-    
-    if (!isPaused) { 
-        // プレビューを閉じても、レシートがまだあるなら「どけて」と指示
-        updateAIChat("一度レシートを退けてね。");
-    }
+function updateHistoryUI() {
+    const l = document.getElementById('history-list'); l.innerHTML = "";
+    historyData.forEach((d, i) => {
+        const card = document.createElement('div'); card.className = "history-card"; card.onclick = () => openPreview(i);
+        card.innerHTML = `<img src="${d.img}">`; l.appendChild(card);
+    });
+    l.scrollLeft = 0;
 }
 
 function updateTransform() {
@@ -329,21 +354,13 @@ function initZoomEvents() {
     }, {passive: false});
 }
 
-function updateHistoryUI() {
-    const l = document.getElementById('history-list'); l.innerHTML = "";
-    historyData.forEach((d, i) => {
-        const card = document.createElement('div'); card.className = "history-card"; card.onclick = () => openPreview(i);
-        card.innerHTML = `<img src="${d.img}">`; l.appendChild(card);
-    });
-    l.scrollLeft = 0;
+function setSpeedMode(s) {
+    speedMode = s;
+    document.getElementById('mode-speed').className = s ? "px-4 py-1 rounded-full text-[9px] font-bold bg-green-600" : "px-4 py-1 rounded-full text-[9px] font-bold";
+    document.getElementById('mode-normal').className = !s ? "px-4 py-1 rounded-full text-[9px] font-bold bg-blue-600" : "px-4 py-1 rounded-full text-[9px] font-bold";
 }
-
-function finalSave() {
-    localStorage.removeItem('taxhelper_backup');
-    alert("全データを保存したよ！");
-}
-
 function toggleMsg() { document.getElementById('msg-box').classList.toggle('minimized'); }
+function finalSave() { localStorage.removeItem('taxhelper_backup'); alert("保存完了！"); }
 </script>
 </body>
 </html>
