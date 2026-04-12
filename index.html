@@ -3,177 +3,190 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>爆速レシートおばちゃん v1.9.2</title>
+    <title>爆速レシートおばちゃん v2.1-MultiMode</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         .scan-area { position: absolute; top: 12%; bottom: 38%; left: 10%; right: 10%; z-index: 20; }
-        .corner { position: absolute; width: 30px; height: 30px; border-color: rgba(74, 222, 128, 0.3); border-style: solid; transition: border-color 0.1s; }
+        .corner { position: absolute; width: 30px; height: 30px; border-color: rgba(74, 222, 128, 0.3); border-style: solid; }
         .top-left { top: 0; left: 0; border-width: 6px 0 0 6px; }
         .top-right { top: 0; right: 0; border-width: 6px 6px 0 0; }
         .bottom-left { bottom: 0; left: 0; border-width: 0 0 6px 6px; }
         .bottom-right { bottom: 0; right: 0; border-width: 0 6px 6px 0; }
-        .detected .corner { border-color: rgba(74, 222, 128, 1); filter: drop-shadow(0 0 10px rgba(74, 222, 128, 0.8)); }
         
-        #preview-overlay { position: fixed; inset: 0; z-index: 100; display: none; flex-direction: column; align-items: center; justify-content: center; backdrop-filter: blur(10px); background: rgba(0,0,0,0.95); }
-        .no-scrollbar::-webkit-scrollbar { display: none; }
-        #msg-box { transition: all 0.3s ease; max-height: 200px; overflow: hidden; }
-        #msg-box.minimized { max-height: 40px; opacity: 0.8; }
+        #preview-overlay, #settings-overlay { position: fixed; inset: 0; z-index: 100; display: none; background: #000; overflow: hidden; }
+        #settings-overlay { background: rgba(0,0,0,0.8); backdrop-filter: blur(15px); -webkit-backdrop-filter: blur(15px); }
+
+        #preview-container { position: absolute; inset: 0; overflow: hidden; display: flex; align-items: center; justify-content: center; }
+        #preview-img { max-width: 100%; max-height: 100%; object-fit: contain; transform-origin: 0 0; will-change: transform; touch-action: none; }
+
+        #hud-panel {
+            position: absolute; bottom: 20px; left: 15px; right: 15px;
+            background: rgba(31, 41, 55, 0.75); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 24px; padding: 20px; z-index: 110;
+        }
         .history-card { min-width: 65px; width: 65px; height: 85px; background: rgba(55,65,81,0.8); border-radius: 6px; border: 1.5px solid #10b981; overflow: hidden; flex-shrink: 0; }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
     </style>
 </head>
 <body class="bg-gray-900 text-white overflow-hidden font-sans text-xs">
 
-    <div id="preview-overlay" class="p-4">
-        <div class="w-full max-w-sm bg-gray-800 rounded-3xl overflow-hidden shadow-2xl border border-gray-700 flex flex-col max-h-[90vh]">
-            <div class="relative h-44 bg-black flex-none">
-                <img id="preview-img" class="w-full h-full object-contain">
-            </div>
-            <div class="p-4 space-y-3 overflow-y-auto no-scrollbar">
-                <div class="grid grid-cols-2 gap-2">
-                    <input type="text" id="edit-date" class="w-full bg-gray-900 border border-gray-600 rounded p-2 text-xs text-white" placeholder="日付">
-                    <input type="text" id="edit-shop" class="w-full bg-gray-900 border border-gray-600 rounded p-2 text-xs text-white" placeholder="店名">
-                </div>
-                <select id="edit-category" class="w-full bg-gray-900 border border-gray-600 rounded p-2 text-sm text-white">
-                    <option>食費</option><option>日用品</option><option>交通費</option><option>交際費</option><option>その他</option>
-                </select>
-                <div class="relative">
-                    <span class="absolute left-3 top-2 text-gray-500 text-lg">¥</span>
-                    <input type="number" id="edit-amount" class="w-full bg-gray-900 border border-gray-600 rounded-lg py-2 pl-8 text-2xl font-mono text-blue-400 outline-none">
+    <div id="settings-overlay" class="flex items-center justify-center p-6">
+        <div class="w-full max-w-xs bg-gray-800 rounded-3xl p-6 border border-gray-700 space-y-6">
+            <h2 class="text-lg font-black text-green-400 text-center">SETTINGS</h2>
+            <div class="space-y-4">
+                <div class="flex items-center justify-between p-3 bg-black/40 rounded-xl">
+                    <div>
+                        <p class="font-bold text-sm">爆速モード</p>
+                        <p class="text-[9px] text-gray-500">連続で撮り溜める。確認は後で。</p>
+                    </div>
+                    <input type="checkbox" id="speed-mode-toggle" checked class="w-10 h-6 rounded-full appearance-none bg-gray-600 checked:bg-green-500 relative transition-all before:content-[''] before:absolute before:w-4 before:h-4 before:bg-white before:rounded-full before:top-1 before:left-1 checked:before:left-5 before:transition-all">
                 </div>
             </div>
-            <div class="p-4 bg-gray-800/50 border-t border-gray-700 flex gap-2">
-                <button onclick="closePreview(false)" class="flex-1 bg-gray-700 py-3 rounded-xl font-bold">キャンセル</button>
-                <button onclick="closePreview(true)" class="flex-1 bg-blue-600 py-3 rounded-xl font-bold">編集を反映</button>
+            <button onclick="toggleSettings()" class="w-full bg-gray-700 py-3 rounded-xl font-bold">閉じる</button>
+        </div>
+    </div>
+
+    <div id="preview-overlay">
+        <div id="preview-container"><img id="preview-img" src="" alt="プレビュー"></div>
+        <div id="hud-panel" class="space-y-4">
+            <div class="grid grid-cols-2 gap-3">
+                <input type="text" id="edit-date" class="w-full bg-black/40 border border-white/10 rounded-lg p-2 text-xs text-white">
+                <input type="text" id="edit-shop" class="w-full bg-black/40 border border-white/10 rounded-lg p-2 text-xs text-white">
+            </div>
+            <select id="edit-category" class="w-full bg-black/40 border border-white/10 rounded-lg p-3 text-sm text-white"><option>食費</option><option>日用品</option><option>交通費</option><option>交際費</option><option>その他</option></select>
+            <div class="relative">
+                <span class="absolute left-4 top-2.5 text-blue-400 text-xl font-bold">¥</span>
+                <input type="number" id="edit-amount" class="w-full bg-black/40 border border-white/10 rounded-xl py-3 pl-10 text-3xl font-mono text-blue-400 outline-none">
+            </div>
+            <div class="flex gap-3 pt-2">
+                <button onclick="closePreview(false)" class="flex-1 bg-white/10 py-4 rounded-2xl font-bold text-gray-300">キャンセル</button>
+                <button onclick="closePreview(true)" class="flex-1 bg-blue-600/80 py-4 rounded-2xl font-bold text-white">反映</button>
             </div>
         </div>
     </div>
 
-    <div class="fixed top-0 left-0 right-0 p-4 z-50 bg-gradient-to-b from-black/80 flex items-start gap-2">
-        <div class="text-4xl flex-none">👵</div>
-        <div class="flex-1">
-            <div id="msg-box" class="bg-white p-2 rounded-lg rounded-tl-none shadow-xl border-2 border-green-500 text-gray-800 font-bold mb-2">
-                <p id="msg" class="leading-tight text-[10px]">撮っても画面は止めないよ！<br>次々見せておくれ！</p>
-            </div>
-            <div class="flex gap-2">
-                <button onclick="toggleMsg()" class="bg-gray-800/80 px-3 py-1 rounded-full border border-white/20 text-[10px]">▼</button>
-                <button onclick="pauseScanner()" class="bg-red-900/80 px-4 py-1 rounded-full border border-red-500/50 text-[10px]">■ 停止</button>
-                <button onclick="resumeScanner()" class="bg-green-900/80 px-4 py-1 rounded-full border border-green-500/50 text-[10px]">▶ 再生</button>
+    <div class="fixed top-0 left-0 right-0 p-4 z-50 flex items-start justify-between">
+        <div class="flex items-start gap-2">
+            <div class="text-4xl">👵</div>
+            <div class="flex flex-col gap-2">
+                <div id="msg-box" class="bg-white/90 p-2 rounded-lg rounded-tl-none border-2 border-green-500 text-gray-800 font-bold minimized">
+                    <p id="msg" class="leading-tight text-[10px]">モードは設定から変えられるよ！</p>
+                </div>
+                <div class="flex gap-2">
+                    <button onclick="toggleMsg()" class="bg-black/60 px-3 py-1 rounded-full border border-white/20 text-[10px]">▼</button>
+                    <button id="ctrl-play" onclick="resumeScanner()" class="bg-green-900/60 px-4 py-1 rounded-full border border-green-500/50 text-[10px]">▶</button>
+                    <button id="ctrl-stop" onclick="pauseScanner()" class="bg-red-900/60 px-4 py-1 rounded-full border border-red-500/50 text-[10px]">■</button>
+                </div>
             </div>
         </div>
+        <button onclick="toggleSettings()" class="bg-black/60 p-3 rounded-full border border-white/10 text-gray-400 active:scale-90 transition-transform">
+            <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /></svg>
+        </button>
     </div>
 
-    <div id="camera-container" class="w-full h-screen relative bg-black overflow-hidden">
-        <div id="placeholder" class="absolute inset-0 flex items-center justify-center text-gray-700 text-[10px] uppercase italic">Waiting for camera...</div>
-        <div id="scan-frame" class="scan-area pointer-events-none">
-            <div class="corner top-left"></div><div class="corner top-right"></div>
-            <div class="corner bottom-left"></div><div class="corner bottom-right"></div>
-        </div>
+    <div id="camera-container" class="w-full h-screen relative bg-black">
+        <div id="placeholder" class="absolute inset-0 flex items-center justify-center text-gray-700 text-[10px]">WAITING...</div>
+        <div id="scan-frame" class="scan-area pointer-events-none"><div class="corner top-left"></div><div class="corner top-right"></div><div class="corner bottom-left"></div><div class="corner bottom-right"></div></div>
     </div>
 
-    <div class="fixed bottom-0 left-0 right-0 z-[50] bg-gradient-to-t from-black via-black/95 to-transparent pt-12 pb-8 px-4">
-        <div class="flex items-end gap-3 mb-4">
-            <button onclick="alert('一括保存の準備中！')" class="flex-none w-14 h-14 rounded-2xl bg-green-600 flex items-center justify-center shadow-lg active:scale-90 transition-transform">
-                <svg class="h-8 w-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" /></svg>
-            </button>
-            <div id="history-list" class="flex-1 flex gap-2 overflow-x-auto no-scrollbar min-h-[85px] items-end px-1 italic text-[8px] text-gray-700">NO DATA</div>
-        </div>
+    <div class="fixed bottom-0 left-0 right-0 z-[50] bg-gradient-to-t from-black pt-12 pb-8 px-4 flex items-end gap-3">
+        <button onclick="alert('一括保存準備中')" class="flex-none w-14 h-14 rounded-2xl bg-green-600 flex items-center justify-center shadow-lg active:scale-90 transition-transform">
+            <svg class="h-8 w-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" /></svg>
+        </button>
+        <div id="history-list" class="flex-1 flex gap-2 overflow-x-auto no-scrollbar min-h-[85px] items-end px-1 italic text-[8px] text-gray-700">NO DATA</div>
     </div>
 
     <canvas id="proc-canvas" class="hidden"></canvas>
 
     <script>
-        let isProcessing = false;
-        let isPaused = true;
-        let history = [];
-        let currentIndex = -1;
-        let videoEl = null;
+        let isProcessing = false, isPaused = true, history = [], currentIndex = -1, videoEl = null;
+        let scale = 1, pointX = 0, pointY = 0, startX = 0, startY = 0, evCache = [], prevDiff = -1, isPinching = false;
+        const img = document.getElementById('preview-img');
 
+        function toggleSettings() { const s = document.getElementById('settings-overlay'); s.style.display = s.style.display === 'flex' ? 'none' : 'flex'; }
         function toggleMsg() { document.getElementById('msg-box').classList.toggle('minimized'); }
-
-        function pauseScanner() { isPaused = true; document.getElementById('msg').innerText = "一時停止中だね。"; }
-
-        async function resumeScanner() {
-            if (!videoEl) await initCamera();
-            isPaused = false;
-            document.getElementById('msg').innerText = "スキャン中！どんどん撮るよ！";
-        }
-
+        function pauseScanner() { isPaused = true; document.getElementById('msg').innerText = "一時停止中。"; }
+        async function resumeScanner() { if (!videoEl) await initCamera(); isPaused = false; document.getElementById('msg').innerText = "スキャン中！"; }
+        
         async function initCamera() {
             try {
                 const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment", width: { ideal: 1280 } } });
-                videoEl = document.createElement('video');
-                videoEl.srcObject = stream; videoEl.setAttribute('playsinline', ''); videoEl.play();
-                videoEl.className = "w-full h-full object-cover";
-                document.getElementById('placeholder').replaceWith(videoEl);
+                videoEl = document.createElement('video'); videoEl.srcObject = stream; videoEl.setAttribute('playsinline', ''); videoEl.play();
+                videoEl.className = "w-full h-full object-cover"; document.getElementById('placeholder').replaceWith(videoEl);
                 setInterval(() => detect(videoEl), 200);
-            } catch (e) { alert("カメラが必要です"); }
+            } catch (e) { alert("カメラエラー"); }
         }
 
         function detect(video) {
             if (isProcessing || isPaused || !video.videoWidth) return;
-            const canvas = document.getElementById('proc-canvas');
-            const ctx = canvas.getContext('2d');
-            canvas.width = 100; canvas.height = 100;
-            ctx.drawImage(video, 0, 0, 100, 100);
-            const pixels = ctx.getImageData(0, 0, 100, 100).data;
-            let whiteCount = 0;
-            for (let i = 0; i < pixels.length; i += 4) {
-                if (pixels[i] > 185 && pixels[i+1] > 185 && pixels[i+2] > 185) whiteCount++;
-            }
-            if (whiteCount / 10000 > 0.08) capture(video);
+            const canvas = document.getElementById('proc-canvas'); const ctx = canvas.getContext('2d'); canvas.width = 100; canvas.height = 100; ctx.drawImage(video, 0, 0, 100, 100);
+            const p = ctx.getImageData(0, 0, 100, 100).data; let w = 0;
+            for (let i = 0; i < p.length; i += 4) { if (p[i] > 185 && p[i+1] > 185 && p[i+2] > 185) w++; }
+            if (w / 10000 > 0.08) capture(video);
         }
 
         function capture(video) {
             isProcessing = true;
-            const saveCanvas = document.createElement('canvas');
-            saveCanvas.width = video.videoWidth; saveCanvas.height = video.videoHeight;
-            saveCanvas.getContext('2d').drawImage(video, 0, 0);
-            
-            // 履歴に追加
-            history.unshift({ img: saveCanvas.toDataURL('image/jpeg', 0.5), amount: "", shop: "", category: "食費", date: new Date().toLocaleDateString() });
+            const c = document.createElement('canvas'); c.width = video.videoWidth; c.height = video.videoHeight; c.getContext('2d').drawImage(video, 0, 0);
+            const data = { img: c.toDataURL('image/jpeg', 0.5), amount: "", shop: "", category: "食費", date: new Date().toLocaleDateString() };
+            history.unshift(data);
             updateHistoryUI();
 
-            // 撮影しても videoEl.play() は継続（画面を固めない）
-            document.getElementById('msg').innerText = `${history.length}枚目撮ったよ！`;
-            
-            // 2.5秒後に次を撮れるようにする
-            setTimeout(() => { isProcessing = false; }, 2500);
+            const isSpeedMode = document.getElementById('speed-mode-toggle').checked;
+            if (!isSpeedMode) {
+                // 通常モード：即座にプレビューを開く
+                openPreview(0);
+            } else {
+                // 爆速モード：そのまま続ける
+                document.getElementById('msg').innerText = `${history.length}枚目撮ったよ！`;
+                setTimeout(() => { isProcessing = false; }, 2500);
+            }
         }
 
         function updateHistoryUI() {
-            const list = document.getElementById('history-list');
-            list.innerHTML = "";
-            history.forEach((data, index) => {
-                const card = document.createElement('div');
-                card.className = "history-card flex-none shadow-lg active:scale-95 transition-transform";
-                card.onclick = () => openPreview(index);
-                card.innerHTML = `<img src="${data.img}" class="w-full h-full object-cover">`;
-                list.appendChild(card);
+            const l = document.getElementById('history-list'); l.innerHTML = "";
+            history.forEach((d, i) => {
+                const card = document.createElement('div'); card.className = "history-card flex-none shadow-lg"; card.onclick = () => openPreview(i);
+                card.innerHTML = `<img src="${d.img}" class="w-full h-full object-cover">`; l.appendChild(card);
             });
         }
 
-        function openPreview(index) {
-            currentIndex = index;
-            isPaused = true; // 編集時は一時停止
-            const item = history[index];
-            document.getElementById('preview-img').src = item.img;
-            document.getElementById('edit-date').value = item.date;
-            document.getElementById('edit-shop').value = item.shop;
-            document.getElementById('edit-category').value = item.category;
-            document.getElementById('edit-amount').value = item.amount;
-            document.getElementById('preview-overlay').style.display = 'flex';
+        function openPreview(i) {
+            currentIndex = i; isPaused = true; scale = 1; pointX = 0; pointY = 0; updateTransform();
+            const it = history[i]; img.src = it.img;
+            document.getElementById('edit-date').value = it.date; document.getElementById('edit-shop').value = it.shop;
+            document.getElementById('edit-category').value = it.category; document.getElementById('edit-amount').value = it.amount;
+            document.getElementById('preview-overlay').style.display = 'block';
         }
 
-        function closePreview(reflect = true) {
-            if (reflect && currentIndex !== -1) {
-                history[currentIndex].date = document.getElementById('edit-date').value;
-                history[currentIndex].shop = document.getElementById('edit-shop').value;
-                history[currentIndex].category = document.getElementById('edit-category').value;
-                history[currentIndex].amount = document.getElementById('edit-amount').value;
+        function closePreview(ref) {
+            if (ref && currentIndex !== -1) {
+                const it = history[currentIndex];
+                it.date = document.getElementById('edit-date').value; it.shop = document.getElementById('edit-shop').value;
+                it.category = document.getElementById('edit-category').value; it.amount = document.getElementById('edit-amount').value;
+                updateHistoryUI();
             }
             document.getElementById('preview-overlay').style.display = 'none';
-            isPaused = false; // カメラ再開
+            isProcessing = false; // 撮影ロックを解除
+            isPaused = false;
         }
+
+        // ズーム・移動ロジック（v1.9.3継承）
+        function updateTransform() { img.style.transform = `translate(${pointX}px, ${pointY}px) scale(${scale})`; }
+        img.onpointerdown = (ev) => { evCache.push(ev); startX = ev.clientX - pointX; startY = ev.clientY - pointY; };
+        img.onpointermove = (ev) => {
+            for (let i = 0; i < evCache.length; i++) { if (ev.pointerId == evCache[i].pointerId) { evCache[i] = ev; break; } }
+            if (evCache.length == 2) {
+                isPinching = true;
+                let curDiff = Math.abs(evCache[0].clientX - evCache[1].clientX);
+                if (prevDiff > 0) { if (curDiff > prevDiff) scale += 0.05; else if (scale > 1) scale -= 0.05; }
+                prevDiff = curDiff;
+            } else if (evCache.length == 1 && !isPinching) {
+                pointX = ev.clientX - startX; pointY = ev.clientY - startY;
+            }
+            updateTransform();
+        };
+        img.onpointerup = (ev) => { for (let i = 0; i < evCache.length; i++) { if (evCache[i].pointerId == ev.pointerId) { evCache.splice(i, 1); break; } } if (evCache.length < 2) { prevDiff = -1; isPinching = false; } };
     </script>
 </body>
 </html>
