@@ -3,80 +3,26 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>TaxHelper Pro v2.7.6</title>
+    <title>TaxHelper Pro v2.8.0</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        /* 中央十字照準（縁取りあり） */
-        .crosshair {
-            position: absolute;
-            top: 50%; left: 50%;
-            transform: translate(-50%, -50%);
-            width: 44px; height: 44px;
-            z-index: 20; pointer-events: none;
-        }
-        .crosshair-line { 
-            position: absolute; 
-            background-color: #4ade80; 
-            box-shadow: 0 0 0 1px rgba(0,0,0,0.8);
-        }
+        /* 現場のUI：中央十字 */
+        .crosshair { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 44px; height: 44px; z-index: 20; pointer-events: none; }
+        .crosshair-line { position: absolute; background-color: #4ade80; box-shadow: 0 0 0 1px rgba(0,0,0,0.8); }
         .crosshair-h { top: 21px; left: 0; width: 44px; height: 2px; }
         .crosshair-v { top: 0; left: 21px; width: 2px; height: 44px; }
-
+        
         @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.2; } }
         .blinking { animation: blink 1.2s infinite; }
 
-        /* ボタン強調用の回転アニメーション */
-        @keyframes rotate-glow {
-            0% { transform: rotate(0deg); border-color: transparent transparent currentcolor currentcolor; }
-            100% { transform: rotate(360deg); border-color: transparent transparent currentcolor currentcolor; }
-        }
-        .active-glow {
-            position: relative;
-        }
-        .active-glow::after {
-            content: ''; position: absolute; inset: -4px;
-            border: 3px solid; border-radius: 9999px;
-            animation: rotate-glow 1.5s linear infinite;
-            pointer-events: none;
-        }
-        .glow-blue::after { color: #3b82f6; }
-        .glow-red::after { color: #ef4444; }
-
-        /* プレビュー：HUD */
-        #preview-overlay { 
-            position: fixed; inset: 0; z-index: 100; display: none; background: rgba(0,0,0,0.9); 
-            touch-action: none;
-        }
+        /* プレビュー：余計な装飾なし、実用本位 */
+        #preview-overlay { position: fixed; inset: 0; z-index: 100; display: none; background: rgba(0,0,0,0.9); touch-action: none; }
+        .preview-viewport { position: absolute; inset: 0; display: flex; items-center: justify-content: center; overflow: hidden; padding-bottom: 320px; background: #000; }
+        #preview-img { touch-action: none; user-select: none; -webkit-user-drag: none; will-change: transform; transition: transform 0.05s linear; }
         
-        .preview-viewport {
-            position: absolute; inset: 0;
-            display: flex; items-center; justify-content: center;
-            overflow: hidden;
-            padding-bottom: 320px;
-            background: #000;
-        }
-
-        #preview-img {
-            touch-action: none;
-            user-select: none;
-            -webkit-user-drag: none;
-            will-change: transform;
-            transition: transform 0.05s linear;
-        }
-
-        #hud-panel {
-            position: absolute; bottom: 30px; left: 12px; right: 12px;
-            background: rgba(30, 41, 59, 0.85); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
-            border: 1px solid rgba(255,255,255,0.1); border-radius: 24px; padding: 20px; z-index: 110;
-        }
-
-        #msg-box { 
-            background: rgba(255, 255, 255, 0.98); 
-            color: #111; 
-            box-shadow: 0 4px 15px rgba(0,0,0,0.4); 
-            border-left: 4px solid #10b981;
-            transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-        }
+        #hud-panel { position: absolute; bottom: 30px; left: 12px; right: 12px; background: rgba(30, 41, 59, 0.85); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border: 1px solid rgba(255,255,255,0.1); border-radius: 24px; padding: 20px; z-index: 110; }
+        
+        #msg-box { background: rgba(255, 255, 255, 0.98); color: #111; box-shadow: 0 4px 15px rgba(0,0,0,0.4); border-left: 4px solid #10b981; transition: all 0.4s; }
         .minimized { height: 0; padding: 0 !important; overflow: hidden; border: none !important; margin: 0 !important; opacity: 0; }
         
         #history-list { flex: 1; display: flex; gap: 10px; overflow-x: auto; padding: 5px; -webkit-overflow-scrolling: touch; }
@@ -84,7 +30,7 @@
         .history-card img { width: 100%; height: 100%; object-fit: cover; }
     </style>
 </head>
-<body class="bg-gray-900 text-white overflow-hidden font-sans text-xs flex flex-col h-screen" onload="preInitCamera()">
+<body class="bg-gray-900 text-white overflow-hidden flex flex-col h-screen" onload="preInitCamera()">
 
 <div id="ready-screen" class="fixed inset-0 z-[300] bg-black/60 backdrop-blur-sm flex flex-col items-center justify-center">
     <h1 class="text-xl font-bold text-green-400 mb-10 tracking-widest">RECEIPT SCANNER</h1>
@@ -92,9 +38,7 @@
 </div>
 
 <div id="preview-overlay">
-    <div class="preview-viewport">
-        <img id="preview-img" src="" class="max-w-full max-h-full object-contain">
-    </div>
+    <div class="preview-viewport"><img id="preview-img" src="" class="max-w-full max-h-full object-contain"></div>
     <div id="hud-panel" class="space-y-4 max-w-md mx-auto">
         <div class="grid grid-cols-2 gap-3">
             <input type="text" id="edit-date" class="bg-white/10 border border-white/20 rounded-lg p-3 text-white">
@@ -114,17 +58,11 @@
 
 <div class="fixed top-0 left-0 right-0 p-4 z-50 flex items-start justify-between pointer-events-none">
     <div class="flex flex-col gap-4 pointer-events-auto">
-        <div id="msg-box" class="p-3 rounded-lg font-bold transition-all">
-            <p id="msg" class="leading-tight text-[11px]">準備完了！レシートを十字に合わせてね。</p>
-        </div>
+        <div id="msg-box" class="p-3 rounded-lg font-bold transition-all"><p id="msg" class="leading-tight text-[11px]">準備完了！レシートを十字に合わせてね。</p></div>
         <div class="flex gap-4 items-center">
             <button onclick="toggleMsg()" class="bg-black/60 p-2.5 rounded-full border border-white/20">▼</button>
-            <div id="btn-resume-wrap" class="relative">
-                <button onclick="resumeScanner()" class="bg-green-600/90 px-6 py-2 rounded-full text-[10px] font-bold">▶ 再生</button>
-            </div>
-            <div id="btn-pause-wrap" class="relative">
-                <button onclick="pauseScanner()" class="bg-red-600/90 px-6 py-2 rounded-full text-[10px] font-bold">■ 停止</button>
-            </div>
+            <button id="btn-resume" onclick="resumeScanner()" class="bg-green-600/90 px-6 py-2 rounded-full text-[10px] font-bold">▶ 再生</button>
+            <button id="btn-pause" onclick="pauseScanner()" class="bg-red-600/90 px-6 py-2 rounded-full text-[10px] font-bold">■ 停止</button>
         </div>
         <div class="flex bg-black/60 p-1 rounded-full border border-white/20 w-fit">
             <button id="mode-speed" onclick="setSpeedMode(true)" class="px-4 py-1 rounded-full text-[9px] font-bold">連続スキャン</button>
@@ -135,10 +73,7 @@
 </div>
 
 <div id="camera-container" class="flex-1 relative bg-black">
-    <div id="crosshair" class="crosshair">
-        <div class="crosshair-line crosshair-h"></div>
-        <div class="crosshair-line crosshair-v"></div>
-    </div>
+    <div id="crosshair" class="crosshair"><div class="crosshair-line crosshair-h"></div><div class="crosshair-line crosshair-v"></div></div>
 </div>
 
 <div class="fixed bottom-0 left-0 right-0 z-[50] bg-gradient-to-t from-black pt-16 pb-8 px-4 flex items-end gap-3 pointer-events-none">
@@ -155,18 +90,17 @@ const STABILITY_THRESHOLD = 5;
 
 let scale = 1, lastScale = 1, startDist = 0, posX = 0, posY = 0, startX = 0, startY = 0;
 
+// --- 修正：ブラウザ離脱・復帰時の「絶対停止」 ---
 window.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'hidden') {
         if (historyData.length > 0) localStorage.setItem('taxhelper_backup', JSON.stringify(historyData));
         isPaused = true; isProcessing = true;
-        updateUIState();
     } else {
         isPaused = true; isProcessing = true;
-        updateAIChat("【接続リセット】カメラを再起動してね。", true);
-        const ctrl = document.getElementById('btn-resume-wrap');
-        if (ctrl) {
-            ctrl.innerHTML = `<button onclick="location.href=location.pathname+'?recover=1'" class="bg-blue-600 px-8 py-2 rounded-full text-[10px] font-bold shadow-xl animate-bounce pointer-events-auto">🔄 再起動</button>`;
-        }
+        document.getElementById('msg').innerText = "【復帰】再生を押して再開してね。";
+        document.getElementById('btn-resume').outerHTML = `<button id="btn-resume" onclick="location.href=location.pathname+'?recover=1'" class="bg-blue-600 px-8 py-2 rounded-full text-[10px] font-bold shadow-xl pointer-events-auto">🔄 再起動</button>`;
+        document.getElementById('btn-pause').style.display = 'none';
+        document.getElementById('crosshair').classList.remove('blinking');
     }
 });
 
@@ -175,104 +109,69 @@ async function preInitCamera() {
         const s = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment", width: { ideal: 1280 } } });
         videoEl = document.createElement('video'); videoEl.srcObject = s; videoEl.setAttribute('playsinline', ''); videoEl.play();
         videoEl.className = "w-full h-full object-cover"; document.getElementById('camera-container').prepend(videoEl);
-        setInterval(() => { if(!isPaused && videoEl.readyState === 4) detect(videoEl); }, 250);
-    } catch (e) { console.error("Pre-camera failed", e); }
+        setInterval(() => { if(videoEl && videoEl.readyState === 4) detect(videoEl); }, 250);
+    } catch (e) { console.error("Camera error", e); }
 }
 
 async function startApp() {
     const urlParams = new URLSearchParams(window.location.search);
-    if (urlParams.get('recover') === '1') {
-        const backup = localStorage.getItem('taxhelper_backup');
-        if (backup) {
-            historyData = JSON.parse(backup);
-            localStorage.removeItem('taxhelper_backup');
-        }
-    } else {
-        // 通常起動時は残留データを徹底掃除
-        localStorage.clear();
-        historyData = [];
-    }
-
+    if (urlParams.get('recover') !== '1') { localStorage.clear(); historyData = []; } 
+    else { const backup = localStorage.getItem('taxhelper_backup'); if (backup) historyData = JSON.parse(backup); }
     audioCtx = new (window.AudioContext || window.webkitAudioContext)();
     document.getElementById('ready-screen').style.display = 'none';
     if (!videoEl) await preInitCamera();
-    
-    updateHistoryUI();
-    resumeScanner();
-    initZoomEvents();
-}
-
-function updateUIState() {
-    const cross = document.getElementById('crosshair');
-    const rWrap = document.getElementById('btn-resume-wrap');
-    const pWrap = document.getElementById('btn-pause-wrap');
-
-    if (isPaused) {
-        cross.classList.remove('blinking');
-        rWrap.classList.remove('active-glow', 'glow-blue');
-        pWrap.classList.add('active-glow', 'glow-red');
-    } else {
-        cross.classList.add('blinking');
-        rWrap.classList.add('active-glow', 'glow-blue');
-        pWrap.classList.remove('active-glow', 'glow-red');
-    }
+    updateHistoryUI(); resumeScanner(); initZoomEvents();
 }
 
 function resumeScanner() { 
     isPaused = false; 
-    isProcessing = false; // 再生ボタンは「待機」に戻す役目
-    updateAIChat("スキャン待機中... 十字に合わせてね。");
-    updateUIState();
+    isProcessing = false; 
+    document.getElementById('msg').innerText = "スキャン待機中..."; 
+    document.getElementById('crosshair').classList.add('blinking'); 
 }
 
 function pauseScanner() { 
     isPaused = true; 
-    isProcessing = true;
-    updateAIChat("一時停止中だよ。");
-    updateUIState();
+    isProcessing = true; 
+    document.getElementById('msg').innerText = "停止中"; 
+    document.getElementById('crosshair').classList.remove('blinking'); 
 }
 
+// --- 判定ロジック：二重撮り防止と「どける」待ちの連動 ---
 function detect(v) {
-    // 停止中は何もしない
     if (isPaused) return;
-
-    const c = document.getElementById('proc-canvas'); 
-    const ctx = c.getContext('2d'); ctx.drawImage(v, 0, 0, 100, 100);
-    const p = ctx.getImageData(0, 0, 100, 100).data; 
-    let white = 0;
+    const c = document.getElementById('proc-canvas'); const ctx = c.getContext('2d'); ctx.drawImage(v, 0, 0, 100, 100);
+    const p = ctx.getImageData(0, 0, 100, 100).data; let white = 0;
     for (let i = 0; i < p.length; i += 4) { if (p[i] > 185 && p[i+1] > 185 && p[i+2] > 185) white++; }
     const ratio = white / 10000;
     
-    // ロック中（どける待ち）の判定
     if (isProcessing) {
-        if (ratio < 0.12) { // 閾値を少し緩めて「どけた」と判定しやすく
-            isProcessing = false;
-            updateAIChat("スキャン待機中... 次をどうぞ！");
+        // 比率が下がれば（レシートをどければ）ロック解除
+        if (ratio < 0.12) { 
+            isProcessing = false; 
+            document.getElementById('msg').innerText = "待機中... 次をどうぞ！"; 
+            document.getElementById('crosshair').classList.add('blinking'); 
+        } 
+        else { 
+            document.getElementById('msg').innerText = "一度レシートを退けてね。"; 
         }
         return;
     }
 
-    // スキャン判定
     if (ratio > 0.15 && ratio < 0.50) {
         stabilityCounter++;
-        if (stabilityCounter === 1) updateAIChat("そのまま止めて！ピントを合わせてるよ...");
-        if (stabilityCounter >= STABILITY_THRESHOLD) {
-            stabilityCounter = 0;
-            playBeepAndCapture(v);
-        }
-    } else {
-        stabilityCounter = 0;
-    }
+        if (stabilityCounter >= STABILITY_THRESHOLD) { stabilityCounter = 0; playBeepAndCapture(v); }
+    } else { stabilityCounter = 0; }
 }
 
 function playBeepAndCapture(v) {
-    if(!audioCtx || isProcessing || isPaused) return;
+    if(isProcessing || isPaused) return;
     isProcessing = true; 
+    document.getElementById('crosshair').classList.remove('blinking');
 
     const o = audioCtx.createOscillator(); const g = audioCtx.createGain();
     o.type = 'sine'; o.frequency.setValueAtTime(880, audioCtx.currentTime);
-    g.gain.setValueAtTime(0.1, audioCtx.currentTime); g.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.1);
-    o.connect(g); g.connect(audioCtx.destination);
+    g.gain.setValueAtTime(0.1, audioCtx.currentTime); o.connect(g); g.connect(audioCtx.destination);
     o.start(); o.stop(audioCtx.currentTime + 0.1);
 
     const c = document.createElement('canvas'); c.width = v.videoWidth; c.height = v.videoHeight;
@@ -280,76 +179,60 @@ function playBeepAndCapture(v) {
     historyData.unshift({ img: c.toDataURL('image/jpeg', 0.6), amount: "", shop: "", items: [], date: new Date().toLocaleDateString() });
     updateHistoryUI();
 
-    if (!speedMode) {
-        openPreview(0);
-    } else {
-        updateAIChat("バッチリ！一度レシートを退けてね。");
-    }
-}
-
-function closePreview(save) {
-    if (!save && currentIndex !== -1) {
-        // 破棄：配列の先頭から削除
-        historyData.splice(currentIndex, 1);
-        updateHistoryUI();
-    } else if (save && currentIndex !== -1) {
-        const it = historyData[currentIndex];
-        it.date = document.getElementById('edit-date').value; 
-        it.shop = document.getElementById('edit-shop').value;
-        it.amount = document.getElementById('edit-amount').value;
-        updateHistoryUI();
-    }
-    document.getElementById('preview-overlay').style.display = 'none';
-    
-    if (!isPaused) { 
-        updateAIChat("一度レシートを退けてね。");
-    }
+    if (!speedMode) openPreview(0); 
+    else document.getElementById('msg').innerText = "退けてね。";
 }
 
 function openPreview(i) {
     currentIndex = i; isProcessing = true;
-    updateAIChat("内容を確認してね。");
     scale = 1; posX = 0; posY = 0; updateTransform();
     const it = historyData[i]; 
     document.getElementById('preview-img').src = it.img;
     document.getElementById('edit-date').value = it.date; 
     document.getElementById('edit-shop').value = it.shop;
     document.getElementById('edit-amount').value = it.amount;
-    document.getElementById('edit-items-area').innerHTML = "<p class='text-gray-400 text-center italic'>項目未解析</p>";
+    document.getElementById('edit-items-area').innerHTML = "<p class='text-gray-400'>項目未解析</p>";
     document.getElementById('preview-overlay').style.display = 'block';
+}
+
+// --- 修正：破棄時に配列からも物理的に削除する ---
+function closePreview(save) {
+    if (!save && currentIndex !== -1) { 
+        historyData.splice(currentIndex, 1); 
+        updateHistoryUI(); 
+    } 
+    else if (save && currentIndex !== -1) {
+        const it = historyData[currentIndex];
+        it.date = document.getElementById('edit-date').value; 
+        it.shop = document.getElementById('edit-shop').value;
+        it.amount = document.getElementById('edit-amount').value; 
+        updateHistoryUI();
+    }
+    document.getElementById('preview-overlay').style.display = 'none';
+    currentIndex = -1;
+    // プレビューを閉じたら「どける」判定を経て自動再開へ
+    if (!isPaused) document.getElementById('msg').innerText = "一度レシートを退けてね。";
 }
 
 function updateHistoryUI() {
     const l = document.getElementById('history-list'); l.innerHTML = "";
     historyData.forEach((d, i) => {
-        const card = document.createElement('div'); card.className = "history-card"; card.onclick = () => openPreview(i);
-        card.innerHTML = `<img src="${d.img}">`; l.appendChild(card);
+        const card = document.createElement('div'); card.className = "history-card"; 
+        card.onclick = () => openPreview(i); card.innerHTML = `<img src="${d.img}">`; l.appendChild(card);
     });
-    l.scrollLeft = 0;
 }
 
-function updateTransform() {
-    document.getElementById('preview-img').style.transform = `translate(${posX}px, ${posY}px) scale(${scale})`;
-}
-
+function updateTransform() { document.getElementById('preview-img').style.transform = `translate(${posX}px, ${posY}px) scale(${scale})`; }
 function initZoomEvents() {
     const overlay = document.getElementById('preview-overlay');
     overlay.addEventListener('touchstart', (e) => {
-        if (e.touches.length === 2) {
-            startDist = Math.hypot(e.touches[0].pageX - e.touches[1].pageX, e.touches[0].pageY - e.touches[1].pageY);
-            lastScale = scale;
-        } else if (e.touches.length === 1) {
-            startX = e.touches[0].pageX - posX; startY = e.touches[0].pageY - posY;
-        }
+        if (e.touches.length === 2) { startDist = Math.hypot(e.touches[0].pageX - e.touches[1].pageX, e.touches[0].pageY - e.touches[1].pageY); lastScale = scale; } 
+        else if (e.touches.length === 1) { startX = e.touches[0].pageX - posX; startY = e.touches[0].pageY - posY; }
     }, {passive: false});
     overlay.addEventListener('touchmove', (e) => {
         e.preventDefault(); 
-        if (e.touches.length === 2) {
-            const dist = Math.hypot(e.touches[0].pageX - e.touches[1].pageX, e.touches[0].pageY - e.touches[1].pageY);
-            scale = Math.min(Math.max(1, lastScale * (dist / startDist)), 4);
-        } else if (e.touches.length === 1) {
-            posX = e.touches[0].pageX - startX; posY = e.touches[0].pageY - startY;
-        }
+        if (e.touches.length === 2) { const dist = Math.hypot(e.touches[0].pageX - e.touches[1].pageX, e.touches[0].pageY - e.touches[1].pageY); scale = Math.min(Math.max(1, lastScale * (dist / startDist)), 4); } 
+        else if (e.touches.length === 1) { posX = e.touches[0].pageX - startX; posY = e.touches[0].pageY - startY; }
         updateTransform();
     }, {passive: false});
 }
