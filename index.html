@@ -3,15 +3,17 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>爆速レシートおばちゃん v2.1.1</title>
+    <title>爆速レシートおばちゃん v2.1.2-FIXED</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        .scan-area { position: absolute; top: 12%; bottom: 38%; left: 10%; right: 10%; z-index: 20; }
+        /* 緑枠位置：少し下げて（15%）カメラ映像と合わせる */
+        .scan-area { position: absolute; top: 15%; bottom: 38%; left: 10%; right: 10%; z-index: 20; }
         .corner { position: absolute; width: 30px; height: 30px; border-color: rgba(74, 222, 128, 0.3); border-style: solid; }
         .top-left { top: 0; left: 0; border-width: 6px 0 0 6px; }
         .top-right { top: 0; right: 0; border-width: 6px 6px 0 0; }
         .bottom-left { bottom: 0; left: 0; border-width: 0 0 6px 6px; }
         .bottom-right { bottom: 0; right: 0; border-width: 0 6px 6px 0; }
+        .detected .corner { border-color: rgba(74, 222, 128, 1); filter: drop-shadow(0 0 10px rgba(74, 222, 128, 0.8)); }
         
         #preview-overlay, #settings-overlay { position: fixed; inset: 0; z-index: 100; display: none; background: #000; overflow: hidden; }
         #settings-overlay { background: rgba(0,0,0,0.8); backdrop-filter: blur(15px); -webkit-backdrop-filter: blur(15px); }
@@ -48,47 +50,50 @@
         <div id="preview-container"><img id="preview-img" src="" alt="プレビュー"></div>
         <div id="hud-panel" class="space-y-4">
             <div class="grid grid-cols-2 gap-3">
-                <input type="text" id="edit-date" class="w-full bg-black/40 border border-white/10 rounded-lg p-2 text-xs text-white">
-                <input type="text" id="edit-shop" class="w-full bg-black/40 border border-white/10 rounded-lg p-2 text-xs text-white">
+                <input type="text" id="edit-date" class="w-full bg-black/40 border border-white/10 rounded-lg p-2 text-xs text-white" placeholder="日付">
+                <input type="text" id="edit-shop" class="w-full bg-black/40 border border-white/10 rounded-lg p-2 text-xs text-white" placeholder="店名">
             </div>
             <select id="edit-category" class="w-full bg-black/40 border border-white/10 rounded-lg p-3 text-sm text-white"><option>食費</option><option>日用品</option><option>交通費</option><option>交際費</option><option>その他</option></select>
             <div class="relative">
                 <span class="absolute left-4 top-2.5 text-blue-400 text-xl font-bold">¥</span>
-                <input type="number" id="edit-amount" class="w-full bg-black/40 border border-white/10 rounded-xl py-3 pl-10 text-3xl font-mono text-blue-400 outline-none">
+                <input type="number" id="edit-amount" class="w-full bg-black/40 border border-white/10 rounded-xl py-3 pl-10 text-3xl font-mono text-blue-400 outline-none focus:border-blue-500">
             </div>
             <div class="flex gap-3 pt-2">
-                <button onclick="closePreview(false)" class="flex-1 bg-white/10 py-4 rounded-2xl font-bold text-gray-300">キャンセル</button>
-                <button onclick="closePreview(true)" class="flex-1 bg-blue-600/80 py-4 rounded-2xl font-bold text-white">反映して次へ</button>
+                <button onclick="closePreview(false)" class="flex-1 bg-white/10 py-4 rounded-2xl font-bold text-gray-300 active:scale-95 transition-transform text-gray-300">キャンセル</button>
+                <button onclick="closePreview(true)" class="flex-1 bg-blue-600/80 py-4 rounded-2xl font-bold active:scale-95 transition-transform text-white">反映して次へ</button>
             </div>
         </div>
     </div>
 
-    <div class="fixed top-0 left-0 right-0 p-4 z-50 flex items-start justify-between">
+    <div class="fixed top-0 left-0 right-0 p-4 z-50 flex items-start justify-between bg-gradient-to-b from-black">
         <div class="flex items-start gap-2">
-            <div class="text-4xl">👵</div>
-            <div class="flex flex-col gap-2">
-                <div id="msg-box" class="bg-white/90 p-2 rounded-lg rounded-tl-none border-2 border-green-500 text-gray-800 font-bold minimized">
-                    <p id="msg" class="leading-tight text-[10px]">レシートを準備しておくれ！</p>
+            <div class="text-4xl flex-none">👵</div>
+            <div class="flex-1 space-y-2">
+                <div id="msg-box" class="bg-white/90backdrop-blur p-2 rounded-lg rounded-tl-none border-2 border-green-500 text-gray-800 font-bold mb-2 minimized transition-all">
+                    <p id="msg" class="leading-tight text-[10px]">スキャン中！レシート見せて！</p>
                 </div>
                 <div class="flex gap-2">
                     <button onclick="toggleMsg()" class="bg-black/60 px-3 py-1 rounded-full border border-white/20 text-[10px]">▼</button>
-                    <button onclick="resumeScanner()" class="bg-green-900/60 px-4 py-1 rounded-full border border-green-500/50 text-[10px]">▶</button>
-                    <button onclick="pauseScanner()" class="bg-red-900/60 px-4 py-1 rounded-full border border-red-500/50 text-[10px]">■</button>
+                    <button id="ctrl-play" onclick="resumeScanner()" class="bg-green-900/60 px-4 py-1 rounded-full border border-green-500/50 text-[10px] shadow-lg">▶ 再生</button>
+                    <button id="ctrl-stop" onclick="pauseScanner()" class="bg-red-900/60 px-4 py-1 rounded-full border border-red-500/50 text-[10px] shadow-lg">■ 停止</button>
                 </div>
             </div>
         </div>
-        <button onclick="toggleSettings()" class="bg-black/60 p-3 rounded-full border border-white/10 text-gray-400">
+        <button onclick="toggleSettings()" class="bg-black/60 p-3 rounded-full border border-white/10 text-gray-400 active:scale-90 transition-transform flex-none">
             <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /></svg>
         </button>
     </div>
 
-    <div id="camera-container" class="w-full h-screen relative bg-black">
-        <div id="placeholder" class="absolute inset-0 flex items-center justify-center text-gray-700 text-[10px]">WAITING...</div>
-        <div id="scan-frame" class="scan-area pointer-events-none"><div class="corner top-left"></div><div class="corner top-right"></div><div class="corner bottom-left"></div><div class="corner bottom-right"></div></div>
+    <div id="camera-container" class="w-full h-screen relative bg-black overflow-hidden">
+        <div id="placeholder" class="absolute inset-0 flex items-center justify-center text-gray-700 text-[10px] uppercase italic">Initializing...</div>
+        <div id="scan-frame" class="scan-area pointer-events-none detected">
+            <div class="corner top-left"></div><div class="corner top-right"></div>
+            <div class="corner bottom-left"></div><div class="corner bottom-right"></div>
+        </div>
     </div>
 
     <div class="fixed bottom-0 left-0 right-0 z-[50] bg-gradient-to-t from-black pt-12 pb-8 px-4 flex items-end gap-3">
-        <button onclick="alert('一括保存準備中')" class="flex-none w-14 h-14 rounded-2xl bg-green-600 flex items-center justify-center shadow-lg active:scale-90 transition-transform">
+        <button onclick="alert('一括保存準備中！')" class="flex-none w-14 h-14 rounded-2xl bg-green-600 flex items-center justify-center shadow-lg active:scale-90 transition-transform">
             <svg class="h-8 w-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" /></svg>
         </button>
         <div id="history-list" class="flex-1 flex gap-2 overflow-x-auto no-scrollbar min-h-[85px] items-end px-1 italic text-[8px] text-gray-700">NO DATA</div>
@@ -97,14 +102,18 @@
     <canvas id="proc-canvas" class="hidden"></canvas>
 
     <script>
-        let isProcessing = false, isPaused = true, history = [], currentIndex = -1, videoEl = null;
+        let isProcessing = false;
+        let isPaused = true;
+        let history = [];
+        let currentIndex = -1;
+        let videoEl = null;
         let scale = 1, pointX = 0, pointY = 0, startX = 0, startY = 0, evCache = [], prevDiff = -1, isPinching = false;
         const img = document.getElementById('preview-img');
 
         function toggleSettings() { const s = document.getElementById('settings-overlay'); s.style.display = s.style.display === 'flex' ? 'none' : 'flex'; }
         function toggleMsg() { document.getElementById('msg-box').classList.toggle('minimized'); }
-        function pauseScanner() { isPaused = true; document.getElementById('msg').innerText = "一時停止したよ。"; }
-        async function resumeScanner() { if (!videoEl) await initCamera(); isPaused = false; document.getElementById('msg').innerText = "スキャン中！レシート見せて！"; }
+        function pauseScanner() { isPaused = true; document.getElementById('msg').innerText = "一時停止したよ。準備しな。"; }
+        async function resumeScanner() { if (!videoEl) await initCamera(); isPaused = false; document.getElementById('msg').innerText = "スキャン再開！見せておくれ！"; }
         
         async function initCamera() {
             try {
@@ -112,7 +121,7 @@
                 videoEl = document.createElement('video'); videoEl.srcObject = stream; videoEl.setAttribute('playsinline', ''); videoEl.play();
                 videoEl.className = "w-full h-full object-cover"; document.getElementById('placeholder').replaceWith(videoEl);
                 setInterval(() => detect(videoEl), 200);
-            } catch (e) { alert("カメラエラー"); }
+            } catch (e) { alert("カメラが必要です。"); }
         }
 
         function detect(video) {
@@ -123,55 +132,54 @@
             if (w / 10000 > 0.08) capture(video);
         }
 
-        // 撮影処理：爆速モードでも3秒の間隔を空ける
         function capture(video) {
-            isProcessing = true;
-            const c = document.createElement('canvas'); 
-            c.width = video.videoWidth; 
-            c.height = video.videoHeight; 
-            c.getContext('2d').drawImage(video, 0, 0);
-            
-            const data = { 
-                img: c.toDataURL('image/jpeg', 0.5), 
-                amount: "", shop: "", category: "食費", 
-                date: new Date().toLocaleDateString() 
-            };
+            isProcessing = true; // 撮影ロック
+            const c = document.createElement('canvas'); c.width = video.videoWidth; c.height = video.videoHeight; c.getContext('2d').drawImage(video, 0, 0);
+            const data = { img: c.toDataURL('image/jpeg', 0.5), amount: "", shop: "", category: "食費", date: new Date().toLocaleDateString() };
             history.unshift(data);
             updateHistoryUI();
 
             const isSpeedMode = document.getElementById('speed-mode-toggle').checked;
             if (!isSpeedMode) {
-                openPreview(0); // 通常モードならすぐプレビュー
+                // 通常モード：プレビューを開くが、JS側の判定はロック(isPaused=true)
+                openPreview(0);
             } else {
-                // 爆速モード：余計なカウントはせず、3秒後に静かに次を許可
-                document.getElementById('msg').innerText = `${history.length}枚目保存。`;
+                // 爆速モード：静かな3秒インターバル
+                document.getElementById('msg').innerText = `${history.length}枚目撮ったよ。`;
                 setTimeout(() => { isProcessing = false; }, 3000);
             }
         }
 
-        // プレビューを閉じる処理：3秒のクールタイム後に判定再開
+        function openPreview(i) {
+            currentIndex = i; isPaused = true; // カメラ判定停止
+            scale = 1; pointX = 0; pointY = 0; updateTransform();
+            const it = history[i]; img.src = it.img;
+            document.getElementById('edit-date').value = it.date; document.getElementById('edit-shop').value = it.shop;
+            document.getElementById('edit-category').value = it.category; document.getElementById('edit-amount').value = it.amount;
+            document.getElementById('preview-overlay').style.display = 'block';
+        }
+
         function closePreview(ref) {
             if (ref && currentIndex !== -1) {
                 const it = history[currentIndex];
-                it.date = document.getElementById('edit-date').value; 
-                it.shop = document.getElementById('edit-shop').value;
-                it.category = document.getElementById('edit-category').value; 
-                it.amount = document.getElementById('edit-amount').value;
+                it.date = document.getElementById('edit-date').value; it.shop = document.getElementById('edit-shop').value;
+                it.category = document.getElementById('edit-category').value; it.amount = document.getElementById('edit-amount').value;
                 updateHistoryUI();
             }
             document.getElementById('preview-overlay').style.display = 'none';
             
-            // 脳みそを使わない静かなインターバル
+            // 静かなる3秒インターバル。脳みそは使いません。
             document.getElementById('msg').innerText = "スキャン再開。"; 
             setTimeout(() => {
-                isProcessing = false; // 3秒後に内部ロックを解除
-                isPaused = false;
+                isProcessing = false; // クールタイム解除
+                isPaused = false; // 判定再開
             }, 3000); 
         }
+
         function updateHistoryUI() {
             const l = document.getElementById('history-list'); l.innerHTML = "";
             history.forEach((d, i) => {
-                const card = document.createElement('div'); card.className = "history-card flex-none shadow-lg"; card.onclick = () => openPreview(i);
+                const card = document.createElement('div'); card.className = "history-card flex-none shadow-lg active:scale-95 transition-transform"; card.onclick = () => openPreview(i);
                 card.innerHTML = `<img src="${d.img}" class="w-full h-full object-cover">`; l.appendChild(card);
             });
         }
