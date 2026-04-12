@@ -3,287 +3,204 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>爆速レシートおばちゃん v2.3.0-Crosshair</title>
+    <title>確定申告レシート補助ツール v2.5.0</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        /* 【修正1】枠を廃止、中央十字照準を表示 */
+        /* 中央十字照準（点滅） */
         .crosshair {
             position: absolute;
-            top: 50%;
-            left: 50%;
+            top: 50%; left: 50%;
             transform: translate(-50%, -50%);
-            width: 40px;
-            height: 40px;
-            z-index: 20;
-            pointer-events: none;
+            width: 40px; height: 40px;
+            z-index: 20; pointer-events: none;
         }
-        .crosshair-line {
-            position: absolute;
-            background-color: rgba(74, 222, 128, 0.7); /* 緑色 */
-        }
+        .crosshair-line { position: absolute; background-color: rgba(74, 222, 128, 0.8); }
         .crosshair-h { top: 19px; left: 0; width: 40px; height: 2px; }
         .crosshair-v { top: 0; left: 19px; width: 2px; height: 40px; }
         
-        /* スキャン中（!isPaused）のみ点滅させる */
-        @keyframes blink {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.1; }
-        }
+        @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.2; } }
         .blinking { animation: blink 1.2s infinite; }
         
-        /* 撮影成功時に一瞬パッと光る */
-        @keyframes flash {
-            0% { border-color: rgba(74, 222, 128, 1); filter: drop-shadow(0 0 15px rgba(74, 222, 128, 1)); }
-            100% { border-color: transparent; }
-        }
-        
-        #overlay-layer { position: fixed; inset: 0; z-index: 200; display: none; background: rgba(0,0,0,0.85); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); align-items: center; justify-content: center; }
-        #ready-screen { position: fixed; inset: 0; z-index: 300; background: #111; display: flex; flex-direction: column; align-items: center; justify-content: center; }
-        
+        /* プレビュー：半透明HUD */
         #preview-overlay { position: fixed; inset: 0; z-index: 100; display: none; background: #000; }
         #hud-panel { 
-            position: absolute; 
-            bottom: calc(20px + env(safe-area-inset-bottom)); 
-            left: 12px; 
-            right: 12px; 
-            background: rgba(30, 41, 59, 0.85);
-            backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
-            border: 1px solid rgba(255,255,255,0.1);
-            border-radius: 28px; 
-            padding: 20px; 
-            z-index: 110; 
-            box-shadow: 0 -10px 25px rgba(0,0,0,0.5);
+            position: absolute; bottom: 30px; left: 12px; right: 12px; 
+            background: rgba(30, 41, 59, 0.85); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255,255,255,0.1); border-radius: 24px; padding: 20px; z-index: 110; 
         }
         
-        #msg-box { background: rgba(255, 255, 255, 0.98) !important; color: #111 !important; box-shadow: 0 4px 15px rgba(0,0,0,0.4); }
-        .minimized { height: 0; padding: 0 !important; overflow: hidden; margin: 0 !important; border: none !important; }
+        /* メッセージボックス */
+        #msg-box { background: rgba(255, 255, 255, 0.98); color: #111; box-shadow: 0 4px 15px rgba(0,0,0,0.4); border-left: 4px solid #10b981; }
+        .minimized { height: 0; padding: 0 !important; overflow: hidden; border: none !important; margin: 0 !important; }
 
-        #history-list { flex: 1; display: flex; gap: 10px; overflow-x: auto; padding: 5px 10px; -webkit-overflow-scrolling: touch; }
-        #history-list::-webkit-scrollbar { display: none; }
-        .history-card { width: 70px; height: 90px; background: #2d3748; border-radius: 10px; border: 2px solid #10b981; overflow: hidden; flex-shrink: 0; box-shadow: 0 4px 6px rgba(0,0,0,0.3); }
+        /* 履歴カード */
+        #history-list { flex: 1; display: flex; gap: 10px; overflow-x: auto; padding: 5px; -webkit-overflow-scrolling: touch; }
+        .history-card { width: 70px; height: 90px; background: #2d3748; border-radius: 8px; border: 2px solid #10b981; overflow: hidden; flex-shrink: 0; }
         .history-card img { width: 100%; height: 100%; object-fit: cover; }
     </style>
 </head>
 <body class="bg-gray-900 text-white overflow-hidden font-sans text-xs flex flex-col h-screen">
 
     <div id="ready-screen" class="fixed inset-0 z-[300] bg-black flex flex-col items-center justify-center">
-        <div class="text-7xl mb-6">👵</div>
-        <h1 class="text-2xl font-black text-green-400 mb-10">爆速レシートおばちゃん</h1>
-        <button onclick="startApp()" class="bg-green-600 px-14 py-5 rounded-full font-black text-xl shadow-2xl active:scale-95 transition-all">おばちゃんを呼ぶ</button>
+        <h1 class="text-xl font-bold text-green-400 mb-10 tracking-widest">RECEIPT SCANNER</h1>
+        <button onclick="startApp()" class="bg-green-600 px-16 py-5 rounded-xl font-bold text-lg shadow-2xl active:scale-95 transition-all">スキャンを開始する</button>
     </div>
 
     <div id="preview-overlay">
-        <div class="absolute inset-0 flex items-center justify-center p-2">
-            <img id="preview-img" src="" class="max-w-full max-h-full object-contain">
-        </div>
-        <div id="hud-panel" class="space-y-4 max-w-md mx-auto pointer-events-auto">
+        <div class="absolute inset-0 flex items-center justify-center p-2"><img id="preview-img" src="" class="max-w-full max-h-full object-contain"></div>
+        <div id="hud-panel" class="space-y-4 max-w-md mx-auto">
             <div class="grid grid-cols-2 gap-3">
-                <input type="text" id="edit-date" class="bg-white/10 border border-white/20 rounded-xl p-3 text-white outline-none">
-                <input type="text" id="edit-shop" class="bg-white/10 border border-white/20 rounded-xl p-3 text-white outline-none" placeholder="店名">
+                <input type="text" id="edit-date" class="bg-white/10 border border-white/20 rounded-lg p-3 text-white">
+                <input type="text" id="edit-shop" class="bg-white/10 border border-white/20 rounded-lg p-3 text-white" placeholder="店名">
             </div>
-            <select id="edit-category" class="w-full bg-white/10 border border-white/20 rounded-xl p-3 text-white outline-none">
-                <option>食費</option><option>日用品</option><option>交通費</option><option>交際費</option><option>その他</option>
+            <select id="edit-category" class="w-full bg-white/10 border border-white/20 rounded-lg p-3 text-white">
+                <option>食費</option><option>日用品</option><option>交通費</option><option>通信費</option><option>その他</option>
             </select>
             <div class="relative">
                 <span class="absolute left-4 top-3 text-blue-400 text-2xl font-bold">¥</span>
-                <input type="number" id="edit-amount" class="w-full bg-black/40 border border-white/20 rounded-2xl py-4 pl-12 text-4xl font-mono text-blue-400 outline-none" placeholder="0">
+                <input type="number" id="edit-amount" class="w-full bg-black/40 border border-white/20 rounded-xl py-4 pl-12 text-4xl font-mono text-blue-400 outline-none">
             </div>
-            <div class="flex gap-4 pt-2">
-                <button onclick="closePreview(false)" class="flex-1 bg-gray-600/50 py-4 rounded-2xl font-bold text-gray-200 active:scale-95 transition-all">キャンセル</button>
-                <button onclick="closePreview(true)" class="flex-1 bg-blue-600/80 py-4 rounded-2xl font-bold text-white shadow-lg active:scale-95 transition-all">反映して次へ</button>
+            <div class="flex gap-4">
+                <button onclick="closePreview(false)" class="flex-1 bg-gray-600/50 py-4 rounded-xl font-bold">破棄</button>
+                <button onclick="closePreview(true)" class="flex-1 bg-blue-600/80 py-4 rounded-xl font-bold">反映して次へ</button>
             </div>
         </div>
     </div>
 
     <div class="fixed top-0 left-0 right-0 p-4 z-50 flex items-start justify-between pointer-events-none">
-        <div class="flex items-start gap-2 pointer-events-auto">
-            <div class="text-4xl flex-none">👵</div>
-            <div class="flex flex-col gap-2 flex-1">
-                <div id="msg-box" class="p-2.5 rounded-xl rounded-tl-none border-2 border-green-500 font-bold transition-all minimized">
-                    <p id="msg" class="leading-tight text-[11px]">スキャン中！十字に合わせて！</p>
-                </div>
-                <div class="flex gap-2">
-                    <button onclick="toggleMsg()" class="bg-black/60 p-2.5 rounded-full border border-white/20 active:scale-90 transition-all">▼</button>
-                    <button id="btn-resume" onclick="resumeScanner()" class="bg-green-600/90 px-5 py-1.5 rounded-full text-[10px] font-bold shadow-lg active:scale-95 transition-all">▶ 再生</button>
-                    <button id="btn-pause" onclick="pauseScanner()" class="bg-red-600/90 px-5 py-1.5 rounded-full text-[10px] font-bold shadow-lg active:scale-95 transition-all">■ 停止</button>
-                </div>
-                <div class="flex bg-black/60 p-1 rounded-full border border-white/20 w-fit">
-                    <button id="mode-speed" onclick="setSpeedMode(true)" class="px-4 py-1 rounded-full text-[9px] font-bold bg-green-600 transition-all">爆速</button>
-                    <button id="mode-normal" onclick="setSpeedMode(false)" class="px-4 py-1 rounded-full text-[9px] font-bold transition-all">通常</button>
-                </div>
+        <div class="flex flex-col gap-2 pointer-events-auto">
+            <div id="msg-box" class="p-3 rounded-lg font-bold transition-all minimized">
+                <p id="msg" class="leading-tight text-[11px]">準備完了</p>
+            </div>
+            <div class="flex gap-2">
+                <button onclick="toggleMsg()" class="bg-black/60 p-2.5 rounded-full border border-white/20">▼</button>
+                <button onclick="resumeScanner()" class="bg-green-600/90 px-5 py-1.5 rounded-full text-[10px] font-bold">▶ 再生</button>
+                <button onclick="pauseScanner()" class="bg-red-600/90 px-5 py-1.5 rounded-full text-[10px] font-bold">■ 停止</button>
+            </div>
+            <div class="flex bg-black/60 p-1 rounded-full border border-white/20 w-fit">
+                <button id="mode-speed" onclick="setSpeedMode(true)" class="px-4 py-1 rounded-full text-[9px] font-bold bg-green-600">自動撮影</button>
+                <button id="mode-normal" onclick="setSpeedMode(false)" class="px-4 py-1 rounded-full text-[9px] font-bold">確認撮影</button>
             </div>
         </div>
-        <button onclick="alert('設定は調整中')" class="bg-black/60 p-3 rounded-full border border-white/20 text-xl shadow-lg pointer-events-auto active:scale-90 transition-all">⚙</button>
+        <button class="bg-black/60 p-3 rounded-full border border-white/20 text-xl pointer-events-auto">⚙</button>
     </div>
 
-    <div id="camera-container" class="flex-1 relative bg-black overflow-hidden">
-        <div id="crosshair" class="crosshair blinking">
+    <div id="camera-container" class="flex-1 relative bg-black">
+        <div id="crosshair" class="crosshair">
             <div class="crosshair-line crosshair-h"></div>
             <div class="crosshair-line crosshair-v"></div>
         </div>
     </div>
 
-    <div class="fixed bottom-0 left-0 right-0 z-[50] bg-gradient-to-t from-black via-black/80 to-transparent pt-16 pb-8 px-4 flex items-end gap-3 pointer-events-none">
-        <button onclick="alert('保存は調整中')" class="flex-none w-16 h-16 rounded-3xl bg-green-600 flex items-center justify-center shadow-xl pointer-events-auto active:scale-90 text-2xl">💾</button>
-        <div id="history-list" class="pointer-events-auto flex items-center">
-            </div>
+    <div class="fixed bottom-0 left-0 right-0 z-[50] bg-gradient-to-t from-black pt-16 pb-8 px-4 flex items-end gap-3 pointer-events-none">
+        <button class="flex-none w-16 h-16 rounded-2xl bg-green-600 flex items-center justify-center pointer-events-auto active:scale-90 text-2xl">💾</button>
+        <div id="history-list" class="pointer-events-auto"></div>
     </div>
 
     <canvas id="proc-canvas" class="hidden"></canvas>
 
     <script>
-        let isProcessing = false;
-        let isPaused = true; // 初期状態は停止
-        let history = [];
-        let currentIndex = -1;
-        let videoEl = null;
-        let speedMode = true;
+        let isProcessing = false, isPaused = true, history = [], currentIndex = -1, videoEl = null, speedMode = true;
         let scale = 1, pointX = 0, pointY = 0, startX = 0, startY = 0, evCache = [], prevDiff = -1, isPinching = false;
         let audioCtx;
 
         async function startApp() {
-            // ここでAudioContextを初期化（ブラウザの許可対策）
             audioCtx = new (window.AudioContext || window.webkitAudioContext)();
             document.getElementById('ready-screen').style.display = 'none';
             await initCamera();
-            resumeScanner(); // 自動でスキャン開始
+            resumeScanner();
         }
 
-        function setSpeedMode(isSpeed) {
-            speedMode = isSpeed;
-            document.getElementById('mode-speed').className = isSpeed ? "px-4 py-1 rounded-full text-[9px] font-bold bg-green-600" : "px-4 py-1 rounded-full text-[9px] font-bold transition-all";
-            document.getElementById('mode-normal').className = !isSpeed ? "px-4 py-1 rounded-full text-[9px] font-bold bg-blue-600" : "px-4 py-1 rounded-full text-[9px] font-bold transition-all";
-            document.getElementById('msg').innerText = isSpeed ? "爆速モード！カシャカシャいくよ！" : "通常モード。1枚ずつ確認。";
+        function setSpeedMode(s) {
+            speedMode = s;
+            document.getElementById('mode-speed').className = s ? "px-4 py-1 rounded-full text-[9px] font-bold bg-green-600" : "px-4 py-1 rounded-full text-[9px] font-bold";
+            document.getElementById('mode-normal').className = !s ? "px-4 py-1 rounded-full text-[9px] font-bold bg-blue-600" : "px-4 py-1 rounded-full text-[9px] font-bold";
         }
 
         function toggleMsg() { document.getElementById('msg-box').classList.toggle('minimized'); }
-        
-        function pauseScanner() {
-            isPaused = true;
-            isProcessing = false; // クールタイム中ならそれもリセット
-            // 十字の点滅を止める
-            document.getElementById('crosshair').classList.remove('blinking');
-            document.getElementById('msg-box').classList.remove('minimized'); // セリフを開く
-            document.getElementById('msg').innerText = "止まったよ。準備できたら再生押して。";
-        }
-        
-        function resumeScanner() {
-            if (!videoEl) return;
-            isPaused = false;
-            isProcessing = false;
-            // 十字の点滅を開始
-            document.getElementById('crosshair').classList.add('blinking');
-            document.getElementById('msg-box').classList.add('minimized'); // セリフを閉じる
-            document.getElementById('msg').innerText = "スキャン中！十字に合わせて！";
-        }
-        
+        function pauseScanner() { isPaused = true; isProcessing = false; document.getElementById('crosshair').classList.remove('blinking'); document.getElementById('msg').innerText = "一時停止中"; }
+        function resumeScanner() { isPaused = false; isProcessing = false; document.getElementById('crosshair').classList.add('blinking'); document.getElementById('msg').innerText = "スキャン待機中..."; }
+
         async function initCamera() {
             try {
-                const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment", width: { ideal: 1280 } } });
-                videoEl = document.createElement('video'); videoEl.srcObject = stream; videoEl.setAttribute('playsinline', ''); videoEl.play();
+                const s = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment", width: { ideal: 1280 } } });
+                videoEl = document.createElement('video'); videoEl.srcObject = s; videoEl.setAttribute('playsinline', ''); videoEl.play();
                 videoEl.className = "w-full h-full object-cover"; document.getElementById('camera-container').prepend(videoEl);
-                setInterval(() => detect(videoEl), 250); // 検出間隔を少し短く
-            } catch (e) { alert("カメラ起動に失敗しました。設定を確認してください。"); }
+                setInterval(() => detect(videoEl), 250);
+            } catch (e) { alert("Camera Error"); }
         }
 
-        // 音と撮影を同期させるための関数
         function playBeepAndCapture(v) {
-            if(!audioCtx) return;
-            isProcessing = true; // 撮影ロック
+            if(!audioCtx || isProcessing) return;
+            isProcessing = true; // 撮影ロック開始
             
-            // 音を鳴らす準備
+            // 音と撮影を同期
             const o = audioCtx.createOscillator(); const g = audioCtx.createGain();
             o.type = 'sine'; o.frequency.setValueAtTime(880, audioCtx.currentTime);
-            g.gain.setValueAtTime(0.1, audioCtx.currentTime); g.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.08);
+            g.gain.setValueAtTime(0.1, audioCtx.currentTime); g.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.1);
             o.connect(g); g.connect(audioCtx.destination);
-            
-            // 音を鳴らす（撮影とほぼ同時）
             o.start(); o.stop(audioCtx.currentTime + 0.1);
-            
-            // 撮影（Canvasに描画）
+
             const c = document.createElement('canvas'); c.width = v.videoWidth; c.height = v.videoHeight;
             c.getContext('2d').drawImage(v, 0, 0);
-            const dataUrl = c.toDataURL('image/jpeg', 0.5);
-            
-            history.unshift({ 
-                img: dataUrl, 
-                amount: "", shop: "", category: "食費", 
-                date: new Date().toLocaleDateString() 
-            });
+            history.unshift({ img: c.toDataURL('image/jpeg', 0.5), amount: "", shop: "", category: "食費", date: new Date().toLocaleDateString() });
             updateHistoryUI();
 
             if (!speedMode) {
                 openPreview(0);
             } else {
-                document.getElementById('msg-box').classList.remove('minimized'); // セリフを開く
-                document.getElementById('msg').innerText = `${history.length}枚目撮ったよ！`;
-                
-                // 爆速モード：3秒のクールタイム後に自動でスキャン再開
-                setTimeout(() => {
-                    // 停止ボタンが押されていない場合のみ再開
-                    if (!isPaused) {
-                        isProcessing = false;
-                        document.getElementById('msg-box').classList.add('minimized'); // セリフを閉じる
-                    }
-                }, 3000);
+                document.getElementById('msg').innerText = `${history.length}件保存。3秒待機...`;
+                setTimeout(() => { if(!isPaused) isProcessing = false; }, 3000); // 3秒後に自動ロック解除
             }
         }
 
-        function detect(video) {
-            if (isProcessing || isPaused || !video.videoWidth) return;
-            const canvas = document.getElementById('proc-canvas'); const ctx = canvas.getContext('2d'); canvas.width = 100; canvas.height = 100; ctx.drawImage(video, 0, 0, 100, 100);
+        function detect(v) {
+            if (isProcessing || isPaused || !v.videoWidth) return;
+            const c = document.getElementById('proc-canvas'); const ctx = c.getContext('2d'); ctx.drawImage(v, 0, 0, 100, 100);
             const p = ctx.getImageData(0, 0, 100, 100).data; let w = 0;
-            // 十字照準なので判定閾値を甘く設定
-            for (let i = 0; i < p.length; i += 4) { if (p[i] > 185 && p[i+1] > 185 && p[i+2] > 185) w++; }
-            if (w / 10000 > 0.08) playBeepAndCapture(video); // 十字付近にレシートがあれば撮影
+            for (let i = 0; i < p.length; i += 4) { if (p[i] > 190 && p[i+1] > 190 && p[i+2] > 190) w++; }
+            if (w / 10000 > 0.1) playBeepAndCapture(v);
         }
 
-        // capture関数は廃止し、playBeepAndCaptureへ統合
-
-        function openPreview(index) {
-            currentIndex = index; isPaused = true;
-            // ズームリセット
-            scale = 1; pointX = 0; pointY = 0; updateTransform();
-            
-            const it = history[index]; document.getElementById('preview-img').src = it.img;
+        function openPreview(i) {
+            currentIndex = i;
+            // 撮影ループは止めないが、isProcessing = true で多重撮影を防ぐ
+            isProcessing = true;
+            const it = history[i]; document.getElementById('preview-img').src = it.img;
             document.getElementById('edit-date').value = it.date; document.getElementById('edit-shop').value = it.shop;
             document.getElementById('edit-category').value = it.category; document.getElementById('edit-amount').value = it.amount;
-            
             document.getElementById('preview-overlay').style.display = 'block';
         }
 
-        function closePreview(reflect) {
-            if (reflect && currentIndex !== -1) {
+        function closePreview(r) {
+            if (r && currentIndex !== -1) {
                 const it = history[currentIndex];
                 it.date = document.getElementById('edit-date').value; it.shop = document.getElementById('edit-shop').value;
                 it.category = document.getElementById('edit-category').value; it.amount = document.getElementById('edit-amount').value;
                 updateHistoryUI();
             }
             document.getElementById('preview-overlay').style.display = 'none';
-            document.getElementById('msg-box').classList.remove('minimized'); // セリフを開く
-            document.getElementById('msg').innerText = "スキャン再開まで3秒...";
+            document.getElementById('msg').innerText = "再起動まで3秒...";
             
-            // 【修正2】通常モードでも3秒のクールタイム後に自動でスキャン再開（ループ）
+            // 【重要】反映後、3秒待機してから確実にスキャンを再開
             setTimeout(() => {
-                // 停止ボタンが押されていない場合のみ再開
-                if(!isPaused) {
-                    isProcessing = false; // クールタイム解除
-                    isPaused = false; // 判定再開
-                    document.getElementById('msg-box').classList.add('minimized'); // セリフを閉じる
+                if (!isPaused) {
+                    isProcessing = false; // ロック解除
+                    document.getElementById('msg').innerText = "スキャン中...";
                 }
             }, 3000);
         }
 
         function updateHistoryUI() {
-            const list = document.getElementById('history-list'); list.innerHTML = "";
-            history.forEach((data, index) => {
-                const card = document.createElement('div'); card.className = "history-card"; card.onclick = () => openPreview(index);
-                card.innerHTML = `<img src="${data.img}">`; list.appendChild(card);
+            const l = document.getElementById('history-list'); l.innerHTML = "";
+            history.forEach((d, i) => {
+                const card = document.createElement('div'); card.className = "history-card"; card.onclick = () => openPreview(i);
+                card.innerHTML = `<img src="${d.img}">`; l.appendChild(card);
             });
-            list.scrollLeft = 0; // 最新を左に表示
+            l.scrollLeft = 0;
         }
 
-        // プレビュー操作ロジック
+        // ズーム/移動
         const pImg = document.getElementById('preview-img');
         function updateTransform() { pImg.style.transform = `translate(${pointX}px, ${pointY}px) scale(${scale})`; }
         pImg.onpointerdown = (ev) => { evCache.push(ev); startX = ev.clientX - pointX; startY = ev.clientY - pointY; };
@@ -291,9 +208,9 @@
             for (let i = 0; i < evCache.length; i++) { if (ev.pointerId == evCache[i].pointerId) { evCache[i] = ev; break; } }
             if (evCache.length == 2) {
                 isPinching = true;
-                let curDiff = Math.abs(evCache[0].clientX - evCache[1].clientX);
-                if (prevDiff > 0) { if (curDiff > prevDiff) scale += 0.05; else if (scale > 1) scale -= 0.05; }
-                prevDiff = curDiff;
+                let d = Math.abs(evCache[0].clientX - evCache[1].clientX);
+                if (prevDiff > 0) { if (d > prevDiff) scale += 0.05; else if (scale > 1) scale -= 0.05; }
+                prevDiff = d;
             } else if (evCache.length == 1 && !isPinching) {
                 pointX = ev.clientX - startX; pointY = ev.clientY - startY;
             }
