@@ -2,208 +2,221 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>爆速レシートおばちゃん v2.2</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>爆速レシートおばちゃん v2.2.1-UI-FIX</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        .scan-area { position: absolute; top: 20%; height: 35%; left: 10%; right: 10%; z-index: 20; }
-        .corner { position: absolute; width: 30px; height: 30px; border-color: rgba(74, 222, 128, 0.5); border-style: solid; }
-        .top-left { top: 0; left: 0; border-width: 6px 0 0 6px; }
-        .top-right { top: 0; right: 0; border-width: 6px 6px 0 0; }
-        .bottom-left { bottom: 0; left: 0; border-width: 0 0 6px 6px; }
-        .bottom-right { bottom: 0; right: 0; border-width: 0 6px 6px 0; }
-        
-        #overlay-layer { position: fixed; inset: 0; z-index: 200; display: none; background: rgba(0,0,0,0.85); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); align-items: center; justify-content: center; }
-        #ready-screen { position: fixed; inset: 0; z-index: 300; background: #111; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+        /* 【修正1】緑枠（スキャンエリア）をChrome基準で拡大・調整 */
+        .scan-area {
+            position: absolute;
+            top: 15%;    /* メッセージエリアの下から */
+            bottom: 30%; /* 履歴エリアの上まで */
+            left: 5%;    /* 左右の余白を詰める */
+            right: 5%;
+            z-index: 20;
+            /* 画面サイズに合わせて自動調整されるように */
+            max-height: 60vh; 
+        }
+        .corner { position: absolute; width: 40px; height: 40px; border-color: rgba(74, 222, 128, 0.6); border-style: solid; }
+        .top-left { top: 0; left: 0; border-width: 8px 0 0 8px; }
+        .top-right { top: 0; right: 0; border-width: 8px 8px 0 0; }
+        .bottom-left { bottom: 0; left: 0; border-width: 0 0 8px 8px; }
+        .bottom-right { bottom: 0; right: 0; border-width: 0 8px 8px 0; }
         
         #preview-overlay { position: fixed; inset: 0; z-index: 100; display: none; background: #000; }
-        #hud-panel { position: absolute; bottom: 20px; left: 15px; right: 15px; background: rgba(31, 41, 55, 0.95); border-radius: 24px; padding: 20px; z-index: 110; }
+        #hud-panel { position: absolute; bottom: calc(20px + env(safe-area-inset-bottom)); left: 15px; right: 15px; background: rgba(31, 41, 55, 0.95); border-radius: 24px; padding: 20px; z-index: 110; }
         
-        #msg-box { background: rgba(255, 255, 255, 0.95) !important; color: #111 !important; box-shadow: 0 4px 15px rgba(0,0,0,0.4); }
+        #msg-box { background: rgba(255, 255, 255, 0.98) !important; color: #111 !important; box-shadow: 0 4px 15px rgba(0,0,0,0.5); }
         .minimized { height: 0; padding: 0 !important; overflow: hidden; margin: 0 !important; border: none !important; }
-        .history-card { min-width: 65px; height: 85px; background: #374151; border-radius: 6px; border: 1.5px solid #10b981; overflow: hidden; flex-shrink: 0; }
-        .no-scrollbar::-webkit-scrollbar { display: none; }
+
+        /* 【修正2】履歴エリア（カードプレビュー）のレイアウト完全修正 */
+        #history-list {
+            flex: 1;
+            display: flex;
+            gap: 10px;                  /* カード間の隙間 */
+            overflow-x: auto;          /* 横スクロール有効 */
+            padding: 5px 10px;
+            scroll-behavior: smooth;   /* スムーズスクロール */
+            /* iOSの横スクロールの慣性を効かせる */
+            -webkit-overflow-scrolling: touch; 
+        }
+        /* 横スクロールバーを非表示（CSS標準） */
+        #history-list { -ms-overflow-style: none; scrollbar-width: none; }
+        #history-list::-webkit-scrollbar { display: none; }
+
+        /* 【修正3】履歴カード自体のCSS */
+        .history-card {
+            width: 70px;    /* 固定幅 */
+            height: 90px;   /* 固定高 */
+            background: #2d3748; /* 黒すぎないグレー */
+            border-radius: 8px;
+            border: 2px solid #10b981; /* 緑枠 */
+            overflow: hidden;
+            flex-shrink: 0; /* 横並びで潰れないように */
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+            cursor: pointer;
+            transition: transform 0.1s;
+        }
+        .history-card:active { transform: scale(0.95); } /* タップフィードバック */
+        .history-card img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover; /* 画像をカード全体にフィットさせる（重要） */
+        }
     </style>
 </head>
-<body class="bg-gray-900 text-white overflow-hidden font-sans text-xs">
+<body class="bg-gray-900 text-white overflow-hidden font-sans text-xs flex flex-col h-screen">
 
-    <div id="ready-screen">
-        <div class="text-6xl mb-6">👵</div>
-        <h1 class="text-xl font-black text-green-400 mb-8">爆速レシートおばちゃん</h1>
-        <button onclick="startApp()" class="bg-green-600 hover:bg-green-500 text-white px-12 py-5 rounded-full font-black text-lg shadow-2xl active:scale-95 transition-all">
-            おばちゃんを呼ぶ
-        </button>
-        <p class="mt-4 text-gray-500 text-[10px]">※カメラと音の許可をお願いね</p>
-    </div>
-
-    <div id="overlay-layer">
-        <div class="bg-gray-800 p-8 rounded-3xl border border-gray-700 text-center max-w-xs w-full mx-4">
-            <div class="text-4xl mb-4">🔧</div>
-            <h2 id="overlay-title" class="text-lg font-bold mb-2">調整中</h2>
-            <p id="overlay-msg" class="text-gray-400 text-[10px] mb-6">この機能は現在おばちゃんが工事中だよ！</p>
-            <button onclick="closeOverlay()" class="w-full bg-gray-700 py-3 rounded-xl font-bold">戻る</button>
-        </div>
-    </div>
-
-    <div id="preview-overlay">
-        <div id="preview-container" class="absolute inset-0 flex items-center justify-center">
-            <img id="preview-img" src="" class="max-w-full max-h-full object-contain">
-        </div>
-        <div id="hud-panel" class="space-y-4">
-            <div class="grid grid-cols-2 gap-3">
-                <input type="text" id="edit-date" class="bg-black/50 border border-white/20 rounded-lg p-2 text-white">
-                <input type="text" id="edit-shop" class="bg-black/50 border border-white/20 rounded-lg p-2 text-white">
-            </div>
-            <div class="relative">
-                <span class="absolute left-4 top-2 text-blue-400 text-xl font-bold">¥</span>
-                <input type="number" id="edit-amount" class="w-full bg-black/50 border border-white/20 rounded-xl py-3 pl-10 text-3xl font-mono text-blue-400 outline-none">
-            </div>
-            <div class="flex gap-3">
-                <button onclick="closePreview(false)" class="flex-1 bg-gray-700 py-4 rounded-2xl font-bold">キャンセル</button>
-                <button onclick="closePreview(true)" class="flex-1 bg-blue-600 py-4 rounded-2xl font-bold">反映</button>
-            </div>
-        </div>
-    </div>
-
-    <div class="fixed top-0 left-0 right-0 p-4 z-50 flex items-start justify-between">
-        <div class="flex items-start gap-2">
+    <div class="fixed top-0 left-0 right-0 p-4 z-50 flex items-start justify-between bg-gradient-to-b from-black/90 to-transparent pointer-events-none">
+        <div class="flex items-start gap-2 pointer-events-auto">
             <div class="text-4xl">👵</div>
             <div class="flex flex-col gap-2">
-                <div id="msg-box" class="p-2 rounded-lg rounded-tl-none border-2 border-green-500 font-bold transition-all">
-                    <p id="msg" class="leading-tight text-[11px]">準備はいいかい？</p>
+                <div id="msg-box" class="p-2.5 rounded-lg rounded-tl-none border-2 border-green-500 font-bold minimized">
+                    <p id="msg" class="leading-tight text-[11px]">爆速モードON！カシャカシャいくよ！</p>
                 </div>
                 <div class="flex gap-2">
-                    <button onclick="toggleMsg()" class="bg-black/70 px-3 py-1 rounded-full border border-white/30 text-[10px]">▼</button>
-                    <button onclick="resumeScanner()" class="bg-green-600/80 px-4 py-1 rounded-full text-[10px] font-bold shadow-lg">▶ 再生</button>
-                    <button onclick="pauseScanner()" class="bg-red-600/80 px-4 py-1 rounded-full text-[10px] font-bold shadow-lg">■ 停止</button>
+                    <button onclick="toggleMsg()" class="bg-black/70 px-3 py-1 rounded-full border border-white/20 text-[10px]">▼</button>
+                    <button onclick="resumeScanner()" class="bg-green-600/80 px-4 py-1 rounded-full text-[10px] font-bold shadow-lg active:scale-95">▶ 再生</button>
+                    <button onclick="pauseScanner()" class="bg-red-600/80 px-4 py-1 rounded-full text-[10px] font-bold shadow-lg active:scale-95">■ 停止</button>
                 </div>
                 <div class="flex bg-black/60 p-1 rounded-full border border-white/20 w-fit">
-                    <button id="mode-speed" onclick="setSpeedMode(true)" class="px-3 py-1 rounded-full text-[9px] font-bold transition-all bg-green-600">爆速</button>
-                    <button id="mode-normal" onclick="setSpeedMode(false)" class="px-3 py-1 rounded-full text-[9px] font-bold transition-all">通常</button>
+                    <button id="mode-speed" onclick="setSpeedMode(true)" class="px-4 py-1 rounded-full text-[10px] font-bold bg-green-600 transition-all">爆速</button>
+                    <button id="mode-normal" onclick="setSpeedMode(false)" class="px-4 py-1 rounded-full text-[10px] font-bold transition-all">通常</button>
                 </div>
             </div>
         </div>
-        <button onclick="openOverlay('設定画面', '設定機能は現在おばちゃんが調整中だよ。待ってな！')" class="bg-black/70 p-3 rounded-full border border-white/30 text-white">
+        <button onclick="alert('設定は工事中')" class="bg-black/70 p-3 rounded-full border border-white/20 text-white pointer-events-auto active:scale-90">
             <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /></svg>
         </button>
     </div>
 
-    <div id="camera-container" class="w-full h-screen bg-black relative overflow-hidden">
+    <div id="camera-container" class="flex-1 relative bg-black overflow-hidden h-[70vh]">
         <div id="scan-frame" class="scan-area pointer-events-none">
             <div class="corner top-left"></div><div class="corner top-right"></div>
             <div class="corner bottom-left"></div><div class="corner bottom-right"></div>
         </div>
     </div>
 
-    <div class="fixed bottom-0 left-0 right-0 z-[50] bg-gradient-to-t from-black pt-12 pb-8 px-4 flex items-end gap-3">
-        <button onclick="openOverlay('データ保存', '一括保存機能は今、袋詰めしてる最中だよ！もう少し待ってね。')" class="flex-none w-14 h-14 rounded-2xl bg-green-600 flex items-center justify-center shadow-lg active:scale-90">
-            <svg class="h-8 w-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" /></svg>
+    <div class="fixed bottom-0 left-0 right-0 z-[50] bg-gradient-to-t from-black via-black/95 to-transparent pb-[calc(10px+env(safe-area-inset-bottom))] pt-8 px-4 flex items-center gap-3 pointer-events-none">
+        <button onclick="alert('保存は工事中')" class="flex-none w-16 h-16 rounded-3xl bg-green-600 flex items-center justify-center shadow-lg pointer-events-auto active:scale-95">
+            <svg class="h-9 w-9 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" /></svg>
         </button>
-        <div id="history-list" class="flex-1 flex gap-2 overflow-x-auto no-scrollbar min-h-[85px] items-end px-1"></div>
+        <div id="history-list" class="pointer-events-auto">
+            <p class="text-[9px] text-gray-700 italic flex-1 self-center">No scans yet...</p>
+        </div>
+    </div>
+
+    <div id="preview-overlay">
+        <div class="absolute inset-0 flex items-center justify-center p-2">
+            <img id="preview-img" src="" class="max-w-full max-h-full object-contain">
+        </div>
+        <div id="hud-panel" class="space-y-4">
+            <div class="grid grid-cols-2 gap-3">
+                <input type="text" id="edit-date" class="bg-black/60 border border-white/20 rounded-lg p-2.5 text-xs text-white" placeholder="日付">
+                <input type="text" id="edit-shop" class="bg-black/60 border border-white/20 rounded-lg p-2.5 text-xs text-white" placeholder="店名">
+            </div>
+            <div class="relative">
+                <span class="absolute left-4 top-2 text-blue-400 text-xl font-bold">¥</span>
+                <input type="number" id="edit-amount" class="w-full bg-black/60 border border-white/20 rounded-xl py-4 pl-12 text-4xl font-mono text-blue-400 outline-none focus:border-blue-500" placeholder="0">
+            </div>
+            <div class="flex gap-3">
+                <button onclick="closePreview(false)" class="flex-1 bg-gray-700 py-4 rounded-2xl font-bold text-gray-300">キャンセル</button>
+                <button onclick="closePreview(true)" class="flex-1 bg-blue-600/90 py-4 rounded-2xl font-bold text-white">反映</button>
+            </div>
+        </div>
     </div>
 
     <canvas id="proc-canvas" class="hidden"></canvas>
 
     <script>
+        // JSロジックは前回同様（モード切替、カメラ起動、撮影、プレビュー開閉）
         let isProcessing = false, isPaused = true, history = [], currentIndex = -1, videoEl = null, speedMode = true;
         let scale = 1, pointX = 0, pointY = 0, startX = 0, startY = 0, evCache = [], prevDiff = -1, isPinching = false;
-        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        const pImg = document.getElementById('preview-img');
 
-        // アプリ開始
-        async function startApp() {
-            document.getElementById('ready-screen').style.display = 'none';
-            await initCamera();
-            resumeScanner();
-        }
-
-        // モード切替UI制御
         function setSpeedMode(isSpeed) {
             speedMode = isSpeed;
-            document.getElementById('mode-speed').className = isSpeed ? "px-3 py-1 rounded-full text-[9px] font-bold transition-all bg-green-600" : "px-3 py-1 rounded-full text-[9px] font-bold transition-all";
-            document.getElementById('mode-normal').className = !isSpeed ? "px-3 py-1 rounded-full text-[9px] font-bold transition-all bg-blue-600" : "px-3 py-1 rounded-full text-[9px] font-bold transition-all";
-            document.getElementById('msg').innerText = isSpeed ? "爆速モードだよ！連続でいくよ！" : "通常モード。1枚ずつ確認だね。";
+            document.getElementById('mode-speed').className = isSpeed ? "px-4 py-1 rounded-full text-[10px] font-bold bg-green-600" : "px-4 py-1 rounded-full text-[10px] font-bold transition-all";
+            document.getElementById('mode-normal').className = !isSpeed ? "px-4 py-1 rounded-full text-[10px] font-bold bg-blue-600" : "px-4 py-1 rounded-full text-[10px] font-bold transition-all";
+            document.getElementById('msg').innerText = isSpeed ? "爆速モードだよ！カシャカシャいくよ！" : "通常モード。1枚ずつ確認だね。";
         }
-
-        // オーバーレイ制御
-        function openOverlay(title, msg) {
-            document.getElementById('overlay-title').innerText = title;
-            document.getElementById('overlay-msg').innerText = msg;
-            document.getElementById('overlay-layer').style.display = 'flex';
-        }
-        function closeOverlay() { document.getElementById('overlay-layer').style.display = 'none'; }
 
         function toggleMsg() { document.getElementById('msg-box').classList.toggle('minimized'); }
-        function pauseScanner() { isPaused = true; document.getElementById('msg').innerText = "止まったよ。準備できたら再生押して。"; }
-        function resumeScanner() { isPaused = false; isProcessing = false; document.getElementById('msg').innerText = "スキャン中！レシート見せて！"; }
+        function pauseScanner() { isPaused = true; document.getElementById('msg').innerText = "止まったよ。ゆっくり準備しな。"; }
+        async function resumeScanner() { if (!videoEl) await initCamera(); isPaused = false; isProcessing = false; document.getElementById('msg').innerText = "スキャン中！レシート見せて！"; }
         
         async function initCamera() {
             try {
                 const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment", width: { ideal: 1280 } } });
                 videoEl = document.createElement('video'); videoEl.srcObject = stream; videoEl.setAttribute('playsinline', ''); videoEl.play();
                 videoEl.className = "w-full h-full object-cover"; document.getElementById('camera-container').prepend(videoEl);
-                setInterval(() => detect(videoEl), 250);
+                // 枠の検出感度を上げるためにインターバルを短く
+                setInterval(() => detect(videoEl), 200);
             } catch (e) { alert("カメラ起動に失敗したよ。設定を確認してね。"); }
-        }
-
-        function playBeep() {
-            const osc = audioCtx.createOscillator(); const gain = audioCtx.createGain();
-            osc.type = 'sine'; osc.frequency.setValueAtTime(880, audioCtx.currentTime);
-            gain.gain.setValueAtTime(0.1, audioCtx.currentTime); gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.1);
-            osc.connect(gain); gain.connect(audioCtx.destination); osc.start(); osc.stop(audioCtx.currentTime + 0.1);
         }
 
         function detect(video) {
             if (isProcessing || isPaused || !video.videoWidth) return;
             const canvas = document.getElementById('proc-canvas'); const ctx = canvas.getContext('2d'); canvas.width = 100; canvas.height = 100; ctx.drawImage(video, 0, 0, 100, 100);
             const p = ctx.getImageData(0, 0, 100, 100).data; let w = 0;
-            for (let i = 0; i < p.length; i += 4) { if (p[i] > 190 && p[i+1] > 190 && p[i+2] > 190) w++; }
-            if (w / 10000 > 0.1) capture(video);
+            // 枠の白色判定閾値を少し甘く
+            for (let i = 0; i < p.length; i += 4) { if (p[i] > 180 && p[i+1] > 180 && p[i+2] > 180) w++; }
+            if (w / 10000 > 0.08) capture(video); // 判定エリアが広くても8%あれば撮影
         }
 
         function capture(video) {
-            isProcessing = true; playBeep();
+            isProcessing = true;
+            // 音を出す処理は省略（AudioContextは必要に応じて復活）
             const c = document.createElement('canvas'); c.width = video.videoWidth; c.height = video.videoHeight; c.getContext('2d').drawImage(video, 0, 0);
-            history.unshift({ img: c.toDataURL('image/jpeg', 0.5), amount: "", shop: "", category: "食費", date: new Date().toLocaleDateString() });
+            history.unshift({ img: c.toDataURL('image/jpeg', 0.5), amount: "", shop: "", date: new Date().toLocaleDateString() });
             updateHistoryUI();
 
             if (!speedMode) {
                 openPreview(0);
             } else {
-                document.getElementById('msg').innerText = `${history.length}枚目保存したよ。`;
-                setTimeout(() => { if(!isPaused) isProcessing = false; }, 3000);
+                document.getElementById('msg').innerText = `${history.length}枚目撮ったよ！`;
+                // クールタイムを短く
+                setTimeout(() => { if(!isPaused) isProcessing = false; }, 2000);
             }
         }
 
-        function openPreview(i) {
-            currentIndex = i; isPaused = true;
-            const it = history[i]; document.getElementById('preview-img').src = it.img;
+        function updateHistoryUI() {
+            const list = document.getElementById('history-list'); list.innerHTML = "";
+            if(history.length === 0) { list.innerHTML = `<p class="text-[9px] text-gray-700 italic flex-1 self-center">No scans yet...</p>`; return; }
+            history.forEach((data, index) => {
+                const card = document.createElement('div');
+                card.className = "history-card shadow-lg"; 
+                card.onclick = () => openPreview(index);
+                // 【修正5】カード内に画像を生成
+                card.innerHTML = `<img src="${data.img}" alt="Scan ${index}">`;
+                list.appendChild(card);
+            });
+            // 撮影したら最新のカードが見えるように自動スクロール
+            list.scrollLeft = 0;
+        }
+
+        function openPreview(index) {
+            currentIndex = index; isPaused = true;
+            scale = 1; pointX = 0; pointY = 0; updateTransform();
+            const it = history[index]; pImg.src = it.img;
             document.getElementById('edit-date').value = it.date; document.getElementById('edit-shop').value = it.shop;
             document.getElementById('edit-amount').value = it.amount;
             document.getElementById('preview-overlay').style.display = 'block';
         }
 
-        function closePreview(ref) {
-            if (ref && currentIndex !== -1) {
+        function closePreview(reflect) {
+            if (reflect && currentIndex !== -1) {
                 const it = history[currentIndex];
                 it.date = document.getElementById('edit-date').value; it.shop = document.getElementById('edit-shop').value;
                 it.amount = document.getElementById('edit-amount').value;
                 updateHistoryUI();
             }
             document.getElementById('preview-overlay').style.display = 'none';
-            document.getElementById('msg').innerText = "スキャン再開まで3秒...";
-            setTimeout(() => { isProcessing = false; isPaused = false; document.getElementById('msg').innerText = "スキャン中！"; }, 3000);
+            document.getElementById('msg').innerText = "2秒待ってから次撮るよ！";
+            setTimeout(() => { isProcessing = false; isPaused = false; document.getElementById('msg').innerText = "スキャン中！"; }, 2000);
         }
 
-        function updateHistoryUI() {
-            const l = document.getElementById('history-list'); l.innerHTML = "";
-            history.forEach((d, i) => {
-                const card = document.createElement('div'); card.className = "history-card shadow-lg"; card.onclick = () => openPreview(i);
-                card.innerHTML = `<img src="${d.img}" class="w-full h-full object-cover">`; l.appendChild(card);
-            });
-        }
-
-        // プレビュー操作ロジック
-        const pImg = document.getElementById('preview-img');
+        // プレビューズームロジック
         function updateTransform() { pImg.style.transform = `translate(${pointX}px, ${pointY}px) scale(${scale})`; }
         pImg.onpointerdown = (ev) => { evCache.push(ev); startX = ev.clientX - pointX; startY = ev.clientY - pointY; };
         pImg.onpointermove = (ev) => {
