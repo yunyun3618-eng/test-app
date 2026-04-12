@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>爆速レシートおばちゃん v2.1-MultiMode</title>
+    <title>爆速レシートおばちゃん v2.1.1</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         .scan-area { position: absolute; top: 12%; bottom: 38%; left: 10%; right: 10%; z-index: 20; }
@@ -15,10 +15,8 @@
         
         #preview-overlay, #settings-overlay { position: fixed; inset: 0; z-index: 100; display: none; background: #000; overflow: hidden; }
         #settings-overlay { background: rgba(0,0,0,0.8); backdrop-filter: blur(15px); -webkit-backdrop-filter: blur(15px); }
-
         #preview-container { position: absolute; inset: 0; overflow: hidden; display: flex; align-items: center; justify-content: center; }
         #preview-img { max-width: 100%; max-height: 100%; object-fit: contain; transform-origin: 0 0; will-change: transform; touch-action: none; }
-
         #hud-panel {
             position: absolute; bottom: 20px; left: 15px; right: 15px;
             background: rgba(31, 41, 55, 0.75); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
@@ -37,12 +35,12 @@
                 <div class="flex items-center justify-between p-3 bg-black/40 rounded-xl">
                     <div>
                         <p class="font-bold text-sm">爆速モード</p>
-                        <p class="text-[9px] text-gray-500">連続で撮り溜める。確認は後で。</p>
+                        <p class="text-[9px] text-gray-500">OFFなら1枚ずつ確認するよ</p>
                     </div>
                     <input type="checkbox" id="speed-mode-toggle" checked class="w-10 h-6 rounded-full appearance-none bg-gray-600 checked:bg-green-500 relative transition-all before:content-[''] before:absolute before:w-4 before:h-4 before:bg-white before:rounded-full before:top-1 before:left-1 checked:before:left-5 before:transition-all">
                 </div>
             </div>
-            <button onclick="toggleSettings()" class="w-full bg-gray-700 py-3 rounded-xl font-bold">閉じる</button>
+            <button onclick="toggleSettings()" class="w-full bg-gray-700 py-3 rounded-xl font-bold">設定を閉じる</button>
         </div>
     </div>
 
@@ -60,7 +58,7 @@
             </div>
             <div class="flex gap-3 pt-2">
                 <button onclick="closePreview(false)" class="flex-1 bg-white/10 py-4 rounded-2xl font-bold text-gray-300">キャンセル</button>
-                <button onclick="closePreview(true)" class="flex-1 bg-blue-600/80 py-4 rounded-2xl font-bold text-white">反映</button>
+                <button onclick="closePreview(true)" class="flex-1 bg-blue-600/80 py-4 rounded-2xl font-bold text-white">反映して次へ</button>
             </div>
         </div>
     </div>
@@ -70,16 +68,16 @@
             <div class="text-4xl">👵</div>
             <div class="flex flex-col gap-2">
                 <div id="msg-box" class="bg-white/90 p-2 rounded-lg rounded-tl-none border-2 border-green-500 text-gray-800 font-bold minimized">
-                    <p id="msg" class="leading-tight text-[10px]">モードは設定から変えられるよ！</p>
+                    <p id="msg" class="leading-tight text-[10px]">レシートを準備しておくれ！</p>
                 </div>
                 <div class="flex gap-2">
                     <button onclick="toggleMsg()" class="bg-black/60 px-3 py-1 rounded-full border border-white/20 text-[10px]">▼</button>
-                    <button id="ctrl-play" onclick="resumeScanner()" class="bg-green-900/60 px-4 py-1 rounded-full border border-green-500/50 text-[10px]">▶</button>
-                    <button id="ctrl-stop" onclick="pauseScanner()" class="bg-red-900/60 px-4 py-1 rounded-full border border-red-500/50 text-[10px]">■</button>
+                    <button onclick="resumeScanner()" class="bg-green-900/60 px-4 py-1 rounded-full border border-green-500/50 text-[10px]">▶</button>
+                    <button onclick="pauseScanner()" class="bg-red-900/60 px-4 py-1 rounded-full border border-red-500/50 text-[10px]">■</button>
                 </div>
             </div>
         </div>
-        <button onclick="toggleSettings()" class="bg-black/60 p-3 rounded-full border border-white/10 text-gray-400 active:scale-90 transition-transform">
+        <button onclick="toggleSettings()" class="bg-black/60 p-3 rounded-full border border-white/10 text-gray-400">
             <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /></svg>
         </button>
     </div>
@@ -105,8 +103,8 @@
 
         function toggleSettings() { const s = document.getElementById('settings-overlay'); s.style.display = s.style.display === 'flex' ? 'none' : 'flex'; }
         function toggleMsg() { document.getElementById('msg-box').classList.toggle('minimized'); }
-        function pauseScanner() { isPaused = true; document.getElementById('msg').innerText = "一時停止中。"; }
-        async function resumeScanner() { if (!videoEl) await initCamera(); isPaused = false; document.getElementById('msg').innerText = "スキャン中！"; }
+        function pauseScanner() { isPaused = true; document.getElementById('msg').innerText = "一時停止したよ。"; }
+        async function resumeScanner() { if (!videoEl) await initCamera(); isPaused = false; document.getElementById('msg').innerText = "スキャン中！レシート見せて！"; }
         
         async function initCamera() {
             try {
@@ -125,24 +123,51 @@
             if (w / 10000 > 0.08) capture(video);
         }
 
+        // 撮影処理：爆速モードでも3秒の間隔を空ける
         function capture(video) {
             isProcessing = true;
-            const c = document.createElement('canvas'); c.width = video.videoWidth; c.height = video.videoHeight; c.getContext('2d').drawImage(video, 0, 0);
-            const data = { img: c.toDataURL('image/jpeg', 0.5), amount: "", shop: "", category: "食費", date: new Date().toLocaleDateString() };
+            const c = document.createElement('canvas'); 
+            c.width = video.videoWidth; 
+            c.height = video.videoHeight; 
+            c.getContext('2d').drawImage(video, 0, 0);
+            
+            const data = { 
+                img: c.toDataURL('image/jpeg', 0.5), 
+                amount: "", shop: "", category: "食費", 
+                date: new Date().toLocaleDateString() 
+            };
             history.unshift(data);
             updateHistoryUI();
 
             const isSpeedMode = document.getElementById('speed-mode-toggle').checked;
             if (!isSpeedMode) {
-                // 通常モード：即座にプレビューを開く
-                openPreview(0);
+                openPreview(0); // 通常モードならすぐプレビュー
             } else {
-                // 爆速モード：そのまま続ける
-                document.getElementById('msg').innerText = `${history.length}枚目撮ったよ！`;
-                setTimeout(() => { isProcessing = false; }, 2500);
+                // 爆速モード：余計なカウントはせず、3秒後に静かに次を許可
+                document.getElementById('msg').innerText = `${history.length}枚目保存。`;
+                setTimeout(() => { isProcessing = false; }, 3000);
             }
         }
 
+        // プレビューを閉じる処理：3秒のクールタイム後に判定再開
+        function closePreview(ref) {
+            if (ref && currentIndex !== -1) {
+                const it = history[currentIndex];
+                it.date = document.getElementById('edit-date').value; 
+                it.shop = document.getElementById('edit-shop').value;
+                it.category = document.getElementById('edit-category').value; 
+                it.amount = document.getElementById('edit-amount').value;
+                updateHistoryUI();
+            }
+            document.getElementById('preview-overlay').style.display = 'none';
+            
+            // 脳みそを使わない静かなインターバル
+            document.getElementById('msg').innerText = "スキャン再開。"; 
+            setTimeout(() => {
+                isProcessing = false; // 3秒後に内部ロックを解除
+                isPaused = false;
+            }, 3000); 
+        }
         function updateHistoryUI() {
             const l = document.getElementById('history-list'); l.innerHTML = "";
             history.forEach((d, i) => {
@@ -151,27 +176,6 @@
             });
         }
 
-        function openPreview(i) {
-            currentIndex = i; isPaused = true; scale = 1; pointX = 0; pointY = 0; updateTransform();
-            const it = history[i]; img.src = it.img;
-            document.getElementById('edit-date').value = it.date; document.getElementById('edit-shop').value = it.shop;
-            document.getElementById('edit-category').value = it.category; document.getElementById('edit-amount').value = it.amount;
-            document.getElementById('preview-overlay').style.display = 'block';
-        }
-
-        function closePreview(ref) {
-            if (ref && currentIndex !== -1) {
-                const it = history[currentIndex];
-                it.date = document.getElementById('edit-date').value; it.shop = document.getElementById('edit-shop').value;
-                it.category = document.getElementById('edit-category').value; it.amount = document.getElementById('edit-amount').value;
-                updateHistoryUI();
-            }
-            document.getElementById('preview-overlay').style.display = 'none';
-            isProcessing = false; // 撮影ロックを解除
-            isPaused = false;
-        }
-
-        // ズーム・移動ロジック（v1.9.3継承）
         function updateTransform() { img.style.transform = `translate(${pointX}px, ${pointY}px) scale(${scale})`; }
         img.onpointerdown = (ev) => { evCache.push(ev); startX = ev.clientX - pointX; startY = ev.clientY - pointY; };
         img.onpointermove = (ev) => {
