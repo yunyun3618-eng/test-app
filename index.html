@@ -6,7 +6,7 @@
     <title>TaxHelper Pro v2.7.0</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        /* --- 既存スタイル（維持） --- */
+        /* 中央十字照準（縁取りあり） */
         .crosshair {
             position: absolute;
             top: 50%; left: 50%;
@@ -25,23 +25,28 @@
         @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.2; } }
         .blinking { animation: blink 1.2s infinite; }
 
-        /* 修正：プレビュー背景でブラウザのズームを阻止 */
+        /* プレビュー：HUD */
         #preview-overlay { 
             position: fixed; inset: 0; z-index: 100; display: none; background: rgba(0,0,0,0.9); 
-            touch-action: none; /* ブラウザ標準のズーム・スクロールを無効化 */
+            touch-action: none; /* ページ全体のズームを物理的に遮断 */
         }
         
-        /* 修正：画像表示エリア（ズームしてもフォームを隠さない） */
+        /* 修正：画像ズーム時にフォームを隠さない隔离エリア */
         .preview-viewport {
             position: absolute; inset: 0;
             display: flex; items-center; justify-content: center;
-            overflow: hidden; /* はみ出た画像を隠す */
-            padding-bottom: 320px; /* 下の入力フォーム用のスペース */
+            overflow: hidden;
+            padding-bottom: 320px; /* HUDパネルとの干渉回避 */
+            background: #000;
         }
 
         #preview-img {
-            transition: transform 0.05s linear; /* 追従性を高めるため短めに設定 */
+            /* JSで制御するため標準操作を無効化 */
+            touch-action: none;
+            user-select: none;
+            -webkit-user-drag: none;
             will-change: transform;
+            transition: transform 0.05s linear;
         }
 
         #hud-panel {
@@ -50,6 +55,7 @@
             border: 1px solid rgba(255,255,255,0.1); border-radius: 24px; padding: 20px; z-index: 110;
         }
 
+        /* AIメッセージボックス */
         #msg-box { 
             background: rgba(255, 255, 255, 0.98); 
             color: #111; 
@@ -59,6 +65,7 @@
         }
         .minimized { height: 0; padding: 0 !important; overflow: hidden; border: none !important; margin: 0 !important; opacity: 0; }
         
+        /* 報告用大型モード */
         .report-mode {
             position: fixed !important;
             inset: 20% 5% auto 5% !important;
@@ -69,6 +76,7 @@
             transform: scale(1.05);
         }
 
+        /* 履歴カード */
         #history-list { flex: 1; display: flex; gap: 10px; overflow-x: auto; padding: 5px; -webkit-overflow-scrolling: touch; }
         .history-card { width: 70px; height: 90px; background: #2d3748; border-radius: 12px; border: 2px solid #10b981; overflow: hidden; flex-shrink: 0; }
         .history-card img { width: 100%; height: 100%; object-fit: cover; }
@@ -141,19 +149,20 @@ let audioCtx;
 let stabilityCounter = 0;
 const STABILITY_THRESHOLD = 3;
 
-// --- 修正：画像ズーム用の内部変数 ---
+// --- 修正：画像ズーム・移動用の内部変数 ---
 let scale = 1, lastScale = 1, startDist = 0;
 let posX = 0, posY = 0, startX = 0, startY = 0;
 
-// --- 修正：ブラウザ離脱・復帰時の挙動 ---
+// --- 修正：ブラウザ離脱・復帰時の「ダブルロック」 ---
 window.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'hidden') {
         isPaused = true;
         isProcessing = true; 
         document.getElementById('crosshair').classList.remove('blinking');
     } else {
-        pauseScanner(); // 明示的に「停止中」にしてエラー画面代わりにする
-        updateAIChat("【通信中断】スキャンを一度停止しました。再開ボタンを押してください。");
+        // 戻ってきたときに勝手に撮影させない
+        pauseScanner();
+        updateAIChat("【通信中断】安全のため停止したよ。再開するなら再生を押してね。");
     }
 });
 
@@ -162,7 +171,7 @@ async function startApp() {
     document.getElementById('ready-screen').style.display = 'none';
     await initCamera();
     resumeScanner();
-    initZoomEvents(); // ズームイベント初期化
+    initZoomEvents(); // ズーム操作の初期化
 }
 
 function setSpeedMode(s) {
@@ -187,7 +196,7 @@ function updateAIChat(text, isReport = false) {
 
 function pauseScanner() { 
     isPaused = true; 
-    isProcessing = true; // 物理ロック
+    isProcessing = true; // 判定ループを物理的にロック
     document.getElementById('crosshair').classList.remove('blinking'); 
     
     if (historyData.length > 0) {
@@ -217,6 +226,7 @@ async function initCamera() {
         videoEl.className = "w-full h-full object-cover"; document.getElementById('camera-container').prepend(videoEl);
         
         setInterval(() => {
+            // isPaused か isProcessing のどちらかでも true なら絶対に入らせない
             if(!isPaused && !isProcessing) detect(videoEl);
         }, 250);
     } catch (e) { 
@@ -285,7 +295,7 @@ function playBeepAndCapture(v) {
     }
 }
 
-// --- 修正：独自ズーム制御（ページ全体の拡大を防ぐ） ---
+// --- 修正：画像単体のズーム・ドラッグ制御 ---
 function updateTransform() {
     const img = document.getElementById('preview-img');
     img.style.transform = `translate(${posX}px, ${posY}px) scale(${scale})`;
@@ -304,7 +314,7 @@ function initZoomEvents() {
     }, {passive: false});
 
     overlay.addEventListener('touchmove', (e) => {
-        e.preventDefault(); // これがページ全体のズームを阻止する
+        e.preventDefault(); // これがページ全体のズームを阻止する核
         if (e.touches.length === 2) {
             const dist = Math.hypot(e.touches[0].pageX - e.touches[1].pageX, e.touches[0].pageY - e.touches[1].pageY);
             scale = Math.min(Math.max(1, lastScale * (dist / startDist)), 4);
@@ -322,7 +332,7 @@ function openPreview(i) {
     isProcessing = true; 
     document.getElementById('crosshair').classList.remove('blinking');
     
-    // 画像座標リセット
+    // 画像座標・倍率リセット
     scale = 1; posX = 0; posY = 0;
     updateTransform();
     
@@ -347,7 +357,7 @@ function closePreview(save) {
     }
     document.getElementById('preview-overlay').style.display = 'none';
     
-    // 単体スキャンの場合は再開ボタンを押すまで待機（自動再開はさせない）
+    // 単体モードでは勝手に再開させない（思想に基づき、再生ボタン待ちにする）
 }
 
 function updateHistoryUI() {
