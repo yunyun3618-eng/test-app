@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>爆速レシートおばちゃん（AI連携版）</title>
+    <title>爆速レシートおばちゃん（超安定版）</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         .scan-frame { position: absolute; width: 16rem; height: 20rem; border: 4px solid transparent; animation: blink 1.5s infinite; }
@@ -23,20 +23,21 @@
 <body class="bg-gray-900 text-white overflow-hidden font-sans">
 
     <script>
+        // 【重要】ここにあなたのAPIキーを貼り付けてください
         const GEMINI_API_KEY = "AIzaSyBhRkqQT_H3E5H6pItF8_145QZjp1WThsc"; 
     </script>
 
-    <div class="fixed top-0 left-0 right-0 p-4 flex justify-between items-start z-30 bg-gradient-to-b from-black/70 to-transparent text-gray-800">
-        <div class="flex items-start gap-2">
+    <div class="fixed top-0 left-0 right-0 p-4 flex justify-between items-start z-30 bg-gradient-to-b from-black/70 to-transparent">
+        <div class="flex items-start gap-2 text-gray-800">
             <div class="text-4xl">👵</div>
             <div class="bg-white p-2 rounded-lg rounded-tl-none relative shadow-lg max-w-[200px]">
-                <p id="msg" class="text-sm font-bold">あんた、レシートを枠に入れてごらん！おばちゃんが見てあげるからね。</p>
+                <p id="msg" class="text-sm font-bold">おばちゃんがレシートを見てるよ。枠に入れておくれ！</p>
             </div>
         </div>
     </div>
 
     <div id="camera-container" class="w-full h-screen flex items-center justify-center relative bg-black">
-        <div id="camera-placeholder" class="text-gray-600">カメラ起動中...</div>
+        <div id="camera-placeholder" class="text-gray-600 text-sm">カメラ準備中...</div>
         <div class="scan-frame z-20 pointer-events-none">
             <div class="scan-frame-inner relative w-full h-full"></div>
         </div>
@@ -46,9 +47,9 @@
         <div id="history-list" class="flex gap-2 overflow-x-auto pb-4 mb-2 no-scrollbar">
             <div id="history-empty" class="min-w-[80px] h-20 bg-gray-700 rounded border border-gray-500 flex items-center justify-center text-xs text-gray-400 font-bold">履歴なし</div>
         </div>
-        <div class="flex justify-between items-center">
-            <div id="status" class="text-xs text-green-400 font-bold">AI：監視中...</div>
-            <button class="bg-gray-600 text-gray-300 px-8 py-3 rounded-full font-bold shadow-xl cursor-not-allowed">💾 AI自動保存モード</button>
+        <div class="flex justify-between items-center px-2">
+            <div id="status" class="text-[10px] text-green-400 font-mono uppercase tracking-widest">IDLE</div>
+            <div class="text-[10px] text-gray-400 font-bold">AUTO SCAN ACTIVE</div>
         </div>
     </div>
 
@@ -61,7 +62,10 @@
         async function startCamera() {
             const container = document.getElementById('camera-placeholder');
             try {
-                const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" }, audio: false });
+                const stream = await navigator.mediaDevices.getUserMedia({ 
+                    video: { facingMode: "environment", width: { ideal: 1280 }, height: { ideal: 720 } }, 
+                    audio: false 
+                });
                 const videoElement = document.createElement('video');
                 videoElement.id = 'camera-video';
                 videoElement.srcObject = stream;
@@ -71,56 +75,77 @@
                 container.innerHTML = "";
                 container.appendChild(videoElement);
                 
-                // AI判定ループを開始（2秒おきにチェック）
-                setInterval(aiScanLoop, 2000);
+                // 判定開始
+                console.log("Camera started. Loop begins.");
+                runLoop();
             } catch (err) {
-                document.getElementById('msg').innerText = "カメラが映らないねぇ。";
+                document.getElementById('msg').innerText = "カメラが映らないねぇ。ブラウザの設定を見ておくれ。";
             }
         }
 
-        async function aiScanLoop() {
-            if (isProcessing || GEMINI_API_KEY.includes("貼り付け")) return;
+        async function runLoop() {
+            while (true) {
+                await aiScanStep();
+                // 判定の間隔を3秒に広げて安定させる
+                await new Promise(resolve => setTimeout(resolve, 3000));
+            }
+        }
+
+        async function aiScanStep() {
+            if (isProcessing || !GEMINI_API_KEY || GEMINI_API_KEY.includes("貼り付け")) return;
             
             const video = document.getElementById('camera-video');
             const canvas = document.getElementById('shutter-canvas');
             if (!video || !video.videoWidth) return;
 
             isProcessing = true;
-            document.getElementById('status').innerText = "AI：レシートを探し中...";
+            document.getElementById('status').innerText = "ANALYZING...";
 
             const context = canvas.getContext('2d');
-            canvas.width = video.videoWidth / 2; // 負荷軽減のため縮小
-            canvas.height = video.videoHeight / 2;
+            // AIに送る画像は小さくして速度を稼ぐ
+            canvas.width = 300;
+            canvas.height = 400;
             context.drawImage(video, 0, 0, canvas.width, canvas.height);
-            const base64Image = canvas.toDataURL('image/jpeg', 0.5).split(',')[1];
+            const base64Image = canvas.toDataURL('image/jpeg', 0.6).split(',')[1];
 
             try {
-                const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`, {
+                // v1betaモデルを使用し、より広いバージョンを網羅するエンドポイント
+                const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`;
+                
+                const response = await fetch(url, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         contents: [{
                             parts: [
-                                { text: "この画像の中央にレシートがはっきり映っていて、文字が読めそうな状態なら 'YES'、そうでなければ 'NO' とだけ1単語で答えて。余計な説明は不要。" },
+                                { text: "Is there a receipt clearly visible in the center? Answer 'YES' or 'NO' only." },
                                 { inline_data: { mime_type: "image/jpeg", data: base64Image } }
                             ]
-                        }]
+                        }],
+                        generationConfig: { temperature: 0.1 }
                     })
                 });
 
                 const data = await response.json();
+                
+                if (data.error) {
+                    throw new Error(data.error.message);
+                }
+
                 const result = data.candidates[0].content.parts[0].text.trim().toUpperCase();
+                console.log("AI Result:", result);
 
                 if (result.includes("YES")) {
                     executeCapture(video);
                 } else {
-                    document.getElementById('status').innerText = "AI：待機中";
+                    document.getElementById('status').innerText = "IDLE (NO RECEIPT)";
                 }
             } catch (err) {
                 console.error("AI Error:", err);
+                document.getElementById('status').innerText = "ERROR: " + err.message.substring(0, 10);
+                document.getElementById('msg').innerText = "おや、AIの調子が悪いみたいだね。";
             } finally {
-                // 判定が終わったら、少し間を空けて次へ
-                setTimeout(() => { isProcessing = false; }, 1000);
+                isProcessing = false;
             }
         }
 
@@ -133,20 +158,21 @@
             context.drawImage(video, 0, 0);
             const imageDataUrl = canvas.toDataURL('image/png');
 
-            // 演出
             document.getElementById('camera-container').classList.add('flash');
             setTimeout(() => document.getElementById('camera-container').classList.remove('flash'), 500);
             
-            const msgs = ["いいレシートだね！", "はい、預かったよ！", "バッチリ映ったよ！", "どんどん持ってきな！"];
-            document.getElementById('msg').innerText = `${scanCount}枚目！${msgs[scanCount % msgs.length]}`;
+            document.getElementById('msg').innerText = `バッチリ！${scanCount}枚目、預かったよ！`;
 
-            // 履歴追加
             const list = document.getElementById('history-list');
             const empty = document.getElementById('history-empty');
             if (empty) empty.remove();
+            
             const newCard = document.createElement('div');
-            newCard.className = "min-w-[80px] h-20 bg-gray-700 rounded border border-green-500 overflow-hidden fade-in";
-            newCard.innerHTML = `<img src="${imageDataUrl}" class="w-full h-full object-cover">`;
+            newCard.className = "min-w-[80px] h-20 bg-gray-700 rounded border border-green-500 overflow-hidden fade-in relative";
+            newCard.innerHTML = `
+                <img src="${imageDataUrl}" class="w-full h-full object-cover">
+                <div class="absolute bottom-0 right-0 bg-green-500 text-white text-[8px] px-1">#${scanCount}</div>
+            `;
             list.prepend(newCard);
         }
 
