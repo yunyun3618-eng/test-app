@@ -27,6 +27,15 @@
 
         /* プレビュー：HUD */
         #preview-overlay { position: fixed; inset: 0; z-index: 100; display: none; background: rgba(0,0,0,0.9); }
+        
+        /* 修正：ズーム干渉防止のためのコンテナ */
+        .preview-viewport {
+            position: absolute; inset: 0;
+            display: flex; items-center; justify-content: center;
+            overflow: hidden; /* 子要素のズームをここに閉じ込める */
+            padding-bottom: 320px; /* HUDパネルと被らないように調整 */
+        }
+
         #hud-panel {
             position: absolute; bottom: 30px; left: 12px; right: 12px;
             background: rgba(30, 41, 59, 0.85); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
@@ -68,7 +77,7 @@
 </div>
 
 <div id="preview-overlay">
-    <div class="absolute inset-0 flex items-center justify-center p-2">
+    <div class="preview-viewport">
         <img id="preview-img" src="" class="max-w-full max-h-full object-contain">
     </div>
     <div id="hud-panel" class="space-y-4 max-w-md mx-auto">
@@ -123,9 +132,17 @@
 
 <script>
 let isProcessing = false, isPaused = true, historyData = [], currentIndex = -1, videoEl = null;
-// デフォルトを単体スキャン(false)に設定
 let speedMode = false; 
 let audioCtx;
+let stabilityCounter = 0;
+const STABILITY_THRESHOLD = 3;
+
+// 修正：OS切り替え時のエラー検知
+window.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') {
+        pauseScanner();
+    }
+});
 
 async function startApp() {
     audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -159,12 +176,9 @@ function pauseScanner() {
     isProcessing = false; 
     document.getElementById('crosshair').classList.remove('blinking'); 
     
-    // 停止時に集計報告（ブワーっと喋る）
     if (historyData.length > 0) {
         const count = historyData.length;
-        const totalText = `お疲れ様！${count}件のレシートを読み取ったよ。
-        まとめて整理しといたから、内容を確認して保存ボタンを押してね。
-        スプレッドシートに直送しちゃうよ！`;
+        const totalText = `お疲れ様！${count}件のレシートを読み取ったよ。\nまとめて整理しといたから、内容を確認して保存ボタンを押してね。`;
         updateAIChat(totalText, true);
     } else {
         updateAIChat("一時停止中だよ。スキャンを再開するなら再生を押してね。");
@@ -181,50 +195,20 @@ function resumeScanner() {
 async function initCamera() {
     try {
         const s = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment", width: { ideal: 1280 } } });
+        
+        // 修正：カメラ切断時のエラー対応
+        s.getVideoTracks()[0].onended = () => {
+            updateAIChat("カメラ接続が切れました。ページを再読み込みしてください。", true);
+        };
+
         videoEl = document.createElement('video'); videoEl.srcObject = s; videoEl.setAttribute('playsinline', ''); videoEl.play();
         videoEl.className = "w-full h-full object-cover"; document.getElementById('camera-container').prepend(videoEl);
-        setInterval(() => detect(videoEl), 250);
-    } catch (e) { alert("Camera Error"); }
+        setInterval(() => {
+            if(!isPaused) detect(videoEl);
+        }, 250);
+    } catch (e) { alert("Camera Error: カメラの権限を確認してください"); }
 }
 
-function playBeepAndCapture(v) {
-    if(!audioCtx || isProcessing) return;
-    isProcessing = true;
-
-    const o = audioCtx.createOscillator(); const g = audioCtx.createGain();
-    o.type = 'sine'; o.frequency.setValueAtTime(880, audioCtx.currentTime);
-    g.gain.setValueAtTime(0.1, audioCtx.currentTime); g.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.1);
-    o.connect(g); g.connect(audioCtx.destination);
-    o.start(); o.stop(audioCtx.currentTime + 0.1);
-
-    const c = document.createElement('canvas'); c.width = v.videoWidth; c.height = v.videoHeight;
-    c.getContext('2d').drawImage(v, 0, 0);
-    
-    const newEntry = { 
-        img: c.toDataURL('image/jpeg', 0.6), 
-        amount: "", 
-        shop: "", 
-        items: [], 
-        date: new Date().toLocaleDateString() 
-    };
-    historyData.unshift(newEntry);
-    updateHistoryUI();
-
-    if (!speedMode) {
-        // 単体スキャン：即HUD
-        openPreview(0);
-    } else {
-        // 連続スキャン：AIキャラの短い反応
-        updateAIChat(`${historyData.length}枚目、受け取ったよ！次は？`);
-        setTimeout(() => { if(!isPaused) isProcessing = false; }, 3000);
-    }
-}
-
-// --- 修正：安定判定用のグローバル変数 ---
-let stabilityCounter = 0;
-const STABILITY_THRESHOLD = 3; // 判定回数（250ms × 3 = 約0.75秒安定で撮影）
-
-// --- 修正：detect関数（ブレ防止・安定待ちロジック） ---
 function detect(v) {
     if (isProcessing || isPaused || !v.videoWidth) return;
     const c = document.getElementById('proc-canvas'); 
@@ -236,25 +220,18 @@ function detect(v) {
     for (let i = 0; i < p.length; i += 4) { 
         if (p[i] > 180 && p[i+1] > 180 && p[i+2] > 180) white++; 
     }
-    
     const ratio = white / 10000;
     
-    // 白い物体（レシート）を捉えているか
     if (ratio > 0.10 && ratio < 0.60) {
         stabilityCounter++;
-        
-        // 安定し始めたらメッセージでホールドを促す
         if (stabilityCounter === 1) {
             document.getElementById('msg').innerText = "そのまま止めて！ピントを合わせてるよ...";
         }
-
-        // 規定回数安定したら撮影実行
         if (stabilityCounter >= STABILITY_THRESHOLD) {
             stabilityCounter = 0;
             playBeepAndCapture(v);
         }
     } else {
-        // 白いものが外れたらカウンターリセット
         stabilityCounter = 0;
         if (!isProcessing && !isPaused) {
             document.getElementById('msg').innerText = "スキャン待機中... 十字に合わせてね。";
@@ -262,7 +239,6 @@ function detect(v) {
     }
 }
 
-// --- 修正：playBeepAndCapture（連続スキャンのテンポ改善） ---
 function playBeepAndCapture(v) {
     if(!audioCtx || isProcessing) return;
     isProcessing = true;
@@ -289,15 +265,19 @@ function playBeepAndCapture(v) {
     if (!speedMode) {
         openPreview(0);
     } else {
-        // 連続スキャン：待機時間を1.5秒に短縮してテンポを上げる
         updateAIChat(`${historyData.length}枚目、受け取ったよ！次は？`);
         setTimeout(() => { if(!isPaused) isProcessing = false; }, 1500); 
     }
 }
 
+// 修正：プレビュー中は確実にisPausedをtrueにする
 function openPreview(i) {
     currentIndex = i;
-    isProcessing = true;
+    isPaused = true; // 解析ストップ
+    isProcessing = true; // 重複撮影防止
+    
+    document.getElementById('crosshair').classList.remove('blinking');
+    
     const it = historyData[i]; document.getElementById('preview-img').src = it.img;
     document.getElementById('edit-date').value = it.date; document.getElementById('edit-shop').value = it.shop;
     document.getElementById('edit-amount').value = it.amount;
@@ -316,7 +296,13 @@ function closePreview(save) {
         updateHistoryUI();
     }
     document.getElementById('preview-overlay').style.display = 'none';
-    setTimeout(() => { if (!isPaused) isProcessing = false; }, 2000);
+    
+    // 修正：少し待ってからスキャン再開
+    setTimeout(() => { 
+        isPaused = false; 
+        isProcessing = false; 
+        document.getElementById('crosshair').classList.add('blinking');
+    }, 1000);
 }
 
 function updateHistoryUI() {
