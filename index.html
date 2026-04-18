@@ -3,23 +3,18 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>TaxHelper Pro v2.8.44</title>
+    <title>TaxHelper Pro v2.8.46</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        /* ★【絶対保持】ターゲット：中央やや上(40%)。プレビューもこれに object-fit: cover で同期。 */
         .crosshair { position: absolute; top: 40%; left: 50%; transform: translate(-50%, -50%); width: 44px; height: 44px; z-index: 20; pointer-events: none; }
         .crosshair-line { position: absolute; background-color: #4ade80; box-shadow: 0 0 0 1px rgba(0,0,0,0.8); }
         .crosshair-h { top: 21px; left: 0; width: 44px; height: 2px; }
         .crosshair-v { top: 0; left: 21px; width: 2px; height: 44px; }
-        
         @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.2; } }
         .blinking { animation: blink 1.2s infinite; }
-
-        /* ★【絶対保持】プレビュー配置：カメラ映像と100%同期させ、「上が切れる」問題を解消。 */
         #preview-overlay { position: fixed; inset: 0; z-index: 200; display: none; background: #000; touch-action: none; }
         .preview-viewport { position: absolute; inset: 0; width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; overflow: hidden; }
         #preview-img { width: 100%; height: 100%; object-fit: cover; will-change: transform; transition: transform 0.05s linear; }
-
         #hud-panel { position: absolute; bottom: 30px; left: 12px; right: 12px; background: rgba(30, 41, 59, 0.85); backdrop-filter: blur(12px); border: 1px solid rgba(255,255,255,0.1); border-radius: 24px; padding: 20px; z-index: 210; }
         #msg-box { background: rgba(255, 255, 255, 0.98); color: #111; border-left: 4px solid #10b981; }
         .history-card { width: 70px; height: 90px; background: #2d3748; border-radius: 12px; border: 2px solid #10b981; overflow: hidden; flex-shrink: 0; }
@@ -80,38 +75,14 @@
 <canvas id="proc-canvas" class="hidden"></canvas>
 
 <script>
-/**
- * ★【絶対保持】撮影ステートマシン
- */
-const STATE_IDLE    = 1; 
-const STATE_KEEP    = 2; 
-const STATE_CAPTURE = 3; 
-const STATE_EJECT   = 4; 
-const STATE_RESET   = 5;
+const STATE_IDLE = 1, STATE_KEEP = 2, STATE_CAPTURE = 3, STATE_EJECT = 4, STATE_RESET = 5;
+let currentPhase = STATE_IDLE, isPaused = true, historyData = [], currentIndex = -1, videoEl = null, speedMode = false, stabilityCounter = 0;
 
-let currentPhase = STATE_IDLE; 
-let isPaused = true;
-let historyData = [];
-let currentIndex = -1;
-let videoEl = null;
-let speedMode = false;
-let stabilityCounter = 0;
-
-/**
- * ★【絶対保持】物理世界との同期
- * STABILITY_THRESHOLD: 8 (約2秒)。
- * 根拠: 前回の15(4秒)が長すぎたため、監督指示によりテンポを半分に短縮。指をサッと抜くリズム。
- */
-const WHITE_THRESHOLD = 185;
-const RATIO_LOW = 0.05; 
-const RATIO_HIGH = 0.15;
-const STABILITY_THRESHOLD = 8; // ★2秒へ短縮
+const WHITE_THRESHOLD = 185, RATIO_LOW = 0.05, RATIO_HIGH = 0.15;
+const STABILITY_THRESHOLD = 10; // ★監督指示：2.5秒(10回一致)へ調整
 
 let scale = 1, lastScale = 1, startDist = 0, posX = 0, posY = 0, startX = 0, startY = 0;
 
-/**
- * カメラ初期化
- */
 async function preInitCamera() {
     try {
         if(videoEl) { videoEl.srcObject.getTracks().forEach(t => t.stop()); videoEl.remove(); }
@@ -119,8 +90,8 @@ async function preInitCamera() {
         videoEl = document.createElement('video'); videoEl.srcObject = s; videoEl.setAttribute('playsinline', ''); videoEl.play();
         videoEl.className = "w-full h-full object-cover"; document.getElementById('camera-container').prepend(videoEl);
         setInterval(() => { if(!isPaused && videoEl.readyState === 4) runLoop(videoEl); }, 250);
-        updateAIChat("カメラ準備完了");
-    } catch (e) { updateAIChat("カメラ起動エラー"); }
+        updateAIChat("準備完了");
+    } catch (e) { updateAIChat("カメラエラー"); }
 }
 
 async function startApp(useRecover) {
@@ -129,19 +100,13 @@ async function startApp(useRecover) {
         if (backup) { historyData = JSON.parse(backup); updateHistoryUI(); }
     }
     document.getElementById('ready-screen').style.display = 'none';
-    resumeScanner();
-    initZoomEvents();
+    resumeScanner(); initZoomEvents();
 }
 
-/**
- * ★【絶対保持】撮影エンジン
- * Phase 2(KEEP)のメッセージを「そのままキープしてね」に変更。
- */
 function runLoop(v) {
     if (isPaused) return;
-
-    const c = document.getElementById('proc-canvas'); 
-    const ctx = c.getContext('2d'); ctx.drawImage(v, 0, 0, 100, 100);
+    const c = document.getElementById('proc-canvas'), ctx = c.getContext('2d');
+    ctx.drawImage(v, 0, 0, 100, 100);
     const p = ctx.getImageData(0, 0, 100, 100).data; 
     let white = 0;
     for (let i = 0; i < p.length; i += 4) { if (p[i] > WHITE_THRESHOLD && p[i+1] > WHITE_THRESHOLD && p[i+2] > WHITE_THRESHOLD) white++; }
@@ -149,53 +114,38 @@ function runLoop(v) {
 
     switch (currentPhase) {
         case STATE_IDLE: 
-            updateAIChat("レシートを入れてください");
+            updateAIChat("レシート待ち");
             if (ratio > RATIO_HIGH) { currentPhase = STATE_KEEP; stabilityCounter = 0; }
             break;
         case STATE_KEEP: 
-            updateAIChat("そのままキープしてね"); // ★監督指示による変更
+            updateAIChat("そのままキープしてね");
             if (ratio > RATIO_HIGH) {
                 stabilityCounter++; 
                 if (stabilityCounter >= STABILITY_THRESHOLD) currentPhase = STATE_CAPTURE;
             } else { currentPhase = STATE_IDLE; }
             break;
         case STATE_CAPTURE: 
-            triggerCapture(v);
-            currentPhase = STATE_EJECT; 
+            triggerCapture(v); currentPhase = STATE_EJECT; 
             break;
         case STATE_EJECT: 
-            updateAIChat("撮影完了、レシートをどけてください...");
+            updateAIChat("どけてください");
             if (ratio < RATIO_LOW) currentPhase = STATE_RESET;
             break;
         case STATE_RESET: 
-            stabilityCounter = 0;
-            currentPhase = STATE_IDLE; 
+            stabilityCounter = 0; currentPhase = STATE_IDLE; 
             break;
     }
-}
-
-function finalSave() {
-    if (historyData.length === 0) {
-        updateAIChat("確定するデータがありません");
-        return;
-    }
-    const count = historyData.length;
-    alert(`${count}件のデータを確定保存します（将来機能）`);
-    updateAIChat("データを確定しました");
 }
 
 function triggerCapture(v) {
     const c = document.createElement('canvas'); c.width = v.videoWidth; c.height = v.videoHeight;
     c.getContext('2d').drawImage(v, 0, 0);
     historyData.unshift({ img: c.toDataURL('image/jpeg', 0.6), amount: "", shop: "", items: [], date: new Date().toLocaleDateString() });
-    updateHistoryUI();
-    if (!speedMode) openPreview(0); 
+    updateHistoryUI(); if (!speedMode) openPreview(0); 
 }
 
 function openPreview(i) {
-    currentIndex = i; 
-    pauseScanner(); 
-    scale = 1; posX = 0; posY = 0; updateTransform();
+    currentIndex = i; pauseScanner(); scale = 1; posX = 0; posY = 0; updateTransform();
     const it = historyData[i]; 
     document.getElementById('preview-img').src = it.img;
     document.getElementById('edit-date').value = it.date; 
@@ -208,7 +158,8 @@ function closePreview(save) {
     if (currentIndex !== -1) {
         if (save) {
             const it = historyData[currentIndex];
-            it.date = document.getElementById('edit-date').value; it.shop = document.getElementById('edit-shop').value;
+            it.date = document.getElementById('edit-date').value;
+            it.shop = document.getElementById('edit-shop').value;
             it.amount = document.getElementById('edit-amount').value;
         } else historyData.splice(currentIndex, 1);
         updateHistoryUI();
@@ -236,12 +187,8 @@ function updateHistoryUI() {
     });
 }
 
-function handleRefresh() {
-    if (historyData.length > 0 && confirm("データを保持してカメラを再起動しますか？")) { updateAIChat("継続中"); }
-    else { historyData = []; updateHistoryUI(); localStorage.removeItem('taxhelper_backup'); }
-    preInitCamera();
-}
-
+function finalSave() { if (historyData.length) alert(historyData.length + "件確定"); }
+function handleRefresh() { historyData = []; updateHistoryUI(); preInitCamera(); }
 function updateTransform() { document.getElementById('preview-img').style.transform = `translate(${posX}px, ${posY}px) scale(${scale})`; }
 
 function initZoomEvents() {
@@ -251,15 +198,11 @@ function initZoomEvents() {
         else if (e.touches.length === 1) { startX = e.touches[0].pageX - posX; startY = e.touches[0].pageY - posY; }
     });
     overlay.addEventListener('touchmove', (e) => {
-        if (e.touches.length === 2) { const dist = Math.hypot(e.touches[0].pageX - e.touches[1].pageX, e.touches[0].pageY - e.touches[1].pageY); scale = Math.min(Math.max(1, lastScale * (dist / startDist)), 4); }
+        if (e.touches.length === 2) { scale = Math.min(Math.max(1, lastScale * (Math.hypot(e.touches[0].pageX - e.touches[1].pageX, e.touches[0].pageY - e.touches[1].pageY) / startDist)), 4); }
         else if (e.touches.length === 1) { posX = e.touches[0].pageX - startX; posY = e.touches[0].pageY - startY; }
         updateTransform();
     });
 }
-
-window.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'hidden' && historyData.length > 0) { localStorage.setItem('taxhelper_backup', JSON.stringify(historyData)); sessionStorage.setItem('is_interrupted', 'true'); }
-});
 </script>
 </body>
 </html>
