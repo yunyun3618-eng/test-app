@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>TaxHelper Pro v2.7.8</title>
+    <title>TaxHelper Pro v2.7.9</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         .crosshair { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 44px; height: 44px; z-index: 20; pointer-events: none; }
@@ -21,17 +21,20 @@
         #history-list { flex: 1; display: flex; gap: 10px; overflow-x: auto; padding: 5px; -webkit-overflow-scrolling: touch; }
         .history-card { width: 70px; height: 90px; background: #2d3748; border-radius: 12px; border: 2px solid #10b981; overflow: hidden; flex-shrink: 0; }
         .history-card img { width: 100%; height: 100%; object-fit: cover; }
+        
+        /* 保存ボタン無効化（未実装のため） */
+        .btn-disabled { pointer-events: none !important; opacity: 0.5 !important; filter: grayscale(1); }
     </style>
 </head>
 <body class="bg-gray-900 text-white overflow-hidden font-sans text-xs flex flex-col h-screen" onload="preInitCamera()">
 
-<div id="ready-screen" class="fixed inset-0 z-[300] bg-black/80 backdrop-blur-md flex flex-col items-center justify-center p-6 text-center">
+<div id="ready-screen" class="fixed inset-0 z-[300] bg-black/40 backdrop-blur-sm flex flex-col items-center justify-center p-6 text-center">
     <div id="ready-content">
         <h1 class="text-2xl font-bold text-green-400 mb-2 tracking-widest">RECEIPT SCANNER</h1>
-        <p class="text-gray-400 mb-10 text-sm">スキャンを開始します</p>
-        <button onclick="startApp(false)" class="bg-green-600 px-16 py-5 rounded-2xl font-bold text-lg shadow-2xl active:scale-95 transition-all w-64">新規スキャン</button>
+        <p class="text-gray-200 mb-10 text-sm font-bold shadow-black">スキャンを開始します</p>
+        <button onclick="startApp(false)" class="bg-green-600 px-16 py-5 rounded-2xl font-bold text-lg shadow-2xl active:scale-95 transition-all w-64">スキャン開始</button>
     </div>
-    <div id="recover-panel" class="hidden mt-8 pt-8 border-t border-white/10 w-64">
+    <div id="recover-panel" class="hidden mt-8 pt-8 border-t border-white/20 w-64">
         <p class="text-blue-400 mb-4 font-bold">中断したデータがあります</p>
         <button onclick="startApp(true)" class="bg-blue-600 px-8 py-4 rounded-2xl font-bold text-md shadow-2xl active:scale-95 transition-all w-full animate-pulse">前回の続きから再開</button>
     </div>
@@ -79,60 +82,41 @@
 </div>
 
 <div class="fixed bottom-0 left-0 right-0 z-[50] bg-gradient-to-t from-black pt-16 pb-8 px-4 flex items-end gap-3 pointer-events-none">
-    <button class="flex-none w-16 h-16 rounded-2xl bg-green-600 flex items-center justify-center pointer-events-auto active:scale-90 text-2xl" onclick="finalSave()">💾</button>
+    <button class="flex-none w-16 h-16 rounded-2xl bg-green-600 flex items-center justify-center pointer-events-auto active:scale-90 text-2xl btn-disabled" onclick="finalSave()">💾</button>
     <div id="history-list" class="pointer-events-auto"></div>
 </div>
 
 <canvas id="proc-canvas" class="hidden"></canvas>
 
 <script>
-// --- 管理フラグ ---
 let isProcessing = false;
 let isPaused = true;
 let historyData = [];
 let currentIndex = -1;
 let videoEl = null;
 
-// --- 動作設定 ---
 let speedMode = false;
 let audioCtx;
 let stabilityCounter = 0;
 const STABILITY_THRESHOLD = 5;
 
-// --- ズーム・移動用 ---
-let scale = 1;
-let lastScale = 1;
-let startDist = 0;
-let posX = 0;
-let posY = 0;
-let startX = 0;
-let startY = 0;
+let scale = 1, lastScale = 1, startDist = 0, posX = 0, posY = 0, startX = 0, startY = 0;
 
-/**
- * visibilitychange: バックグラウンド移行時の処理
- * 中断時はセッションフラグを立てて保存。ブラウザの「更新」ではフラグが立たない。
- */
 window.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'hidden') {
         if (historyData.length > 0) {
             localStorage.setItem('taxhelper_backup', JSON.stringify(historyData));
-            // 中断（App Switcherなど）の証拠を残す
             sessionStorage.setItem('is_interrupted', 'true');
         }
         pauseScanner(); 
     }
 });
 
-/**
- * preInitCamera: カメラの初期準備
- * 中断フラグがある場合のみ、中央に復旧パネルを表示。
- */
 async function preInitCamera() {
     try {
         const backup = localStorage.getItem('taxhelper_backup');
         const interrupted = sessionStorage.getItem('is_interrupted');
         
-        // v2.7.8 修正：中断フラグがある時のみパネルを出す
         if (backup && interrupted) {
             document.getElementById('recover-panel').classList.remove('hidden');
         }
@@ -144,15 +128,11 @@ async function preInitCamera() {
     } catch (e) { console.error("Camera failed", e); }
 }
 
-/**
- * startApp: アプリ正式開始
- */
 async function startApp(useRecover) {
     if (useRecover) {
         const backup = localStorage.getItem('taxhelper_backup');
         if (backup) { historyData = JSON.parse(backup); updateHistoryUI(); }
     }
-    // 復帰後はフラグを掃除（次回リロード対策）
     localStorage.removeItem('taxhelper_backup');
     sessionStorage.removeItem('is_interrupted');
 
@@ -172,10 +152,6 @@ function updateAIChat(text) {
     document.getElementById('msg').innerText = text;
 }
 
-/**
- * pauseScanner: 停止処理
- * 停止中であることがわかるよう文言を差別化。
- */
 function pauseScanner() { 
     isPaused = true;
     document.getElementById('crosshair').classList.remove('blinking'); 
@@ -188,9 +164,6 @@ function resumeScanner() {
     document.getElementById('crosshair').classList.add('blinking'); 
 }
 
-/**
- * detect: 面積判定ロジック
- */
 function detect(v) {
     if (isPaused) return;
 
@@ -201,7 +174,6 @@ function detect(v) {
     for (let i = 0; i < p.length; i += 4) { if (p[i] > 185 && p[i+1] > 185 && p[i+2] > 185) white++; }
     const ratio = white / 10000;
     
-    // v2.7.8 修正：文言の具体化
     if (isProcessing) {
         if (ratio < 0.08) {
             isProcessing = false;
@@ -224,9 +196,6 @@ function detect(v) {
     }
 }
 
-/**
- * playBeepAndCapture: 撮影実行
- */
 function playBeepAndCapture(v) {
     if(!audioCtx || isPaused) return;
     
@@ -245,7 +214,7 @@ function playBeepAndCapture(v) {
     });
     
     updateHistoryUI();
-    isProcessing = true; // v2.7.8 修正：モードによらずどける待ちをセット
+    isProcessing = true; 
 
     if (!speedMode) {
         openPreview(0);
@@ -322,9 +291,7 @@ function updateHistoryUI() {
 }
 
 function finalSave() {
-    localStorage.removeItem('taxhelper_backup');
-    sessionStorage.removeItem('is_interrupted');
-    alert("保存しました！");
+    // 💾ボタンはCSSで無効化されているため、現状ここへは到達しません。
 }
 
 function toggleMsg() { document.getElementById('msg-box').classList.toggle('minimized'); }
