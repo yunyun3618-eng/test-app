@@ -3,35 +3,27 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>TaxHelper Pro v2.8.16</title>
+    <title>TaxHelper Pro v2.8.20</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        /* 【検証】ターゲットポイント：UIの被りを考慮し、50%から「40%」へ引き上げ */
-        .crosshair { 
-            position: absolute; 
-            top: 40%; 
-            left: 50%; 
-            transform: translate(-50%, -50%); 
-            width: 44px; 
-            height: 44px; 
-            z-index: 20; 
-            pointer-events: none; 
-        }
+        /* 【監督指示：十字の位置】
+           画面中央（50%）だとUIや操作指でレシートが隠れて見えにくいため、
+           視覚的な操作性を考慮して「40%」の高さに固定。 */
+        .crosshair { position: absolute; top: 40%; left: 50%; transform: translate(-50%, -50%); width: 44px; height: 44px; z-index: 20; pointer-events: none; }
         .crosshair-line { position: absolute; background-color: #4ade80; box-shadow: 0 0 0 1px rgba(0,0,0,0.8); }
         .crosshair-h { top: 21px; left: 0; width: 44px; height: 2px; }
         .crosshair-v { top: 0; left: 21px; width: 2px; height: 44px; }
         @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.2; } }
         .blinking { animation: blink 1.2s infinite; }
         
-        /* プレビュー画面の設定 */
+        /* プレビュー画面：撮影後に内容を確認・修正するための重要な領域 */
         #preview-overlay { position: fixed; inset: 0; z-index: 200; display: none; background: rgba(0,0,0,0.9); touch-action: none; }
         .preview-viewport { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; overflow: hidden; padding-bottom: 320px; background: #000; }
         #preview-img { touch-action: none; user-select: none; -webkit-user-drag: none; will-change: transform; transition: transform 0.05s linear; }
-        #hud-panel { position: absolute; bottom: 30px; left: 12px; right: 12px; background: rgba(30, 41, 59, 0.85); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border: 1px solid rgba(255,255,255,0.1); border-radius: 24px; padding: 20px; z-index: 210; }
-        #msg-box { background: rgba(255, 255, 255, 0.98); color: #111; box-shadow: 0 4px 15px rgba(0,0,0,0.4); border-left: 4px solid #10b981; }
+        #hud-panel { position: absolute; bottom: 30px; left: 12px; right: 12px; background: rgba(30, 41, 59, 0.85); backdrop-filter: blur(12px); border: 1px solid rgba(255,255,255,0.1); border-radius: 24px; padding: 20px; z-index: 210; }
         
-        /* 履歴リスト：監督が作り上げたカード化UI */
-        #history-list { flex: 1; display: flex; gap: 10px; overflow-x: auto; padding: 5px; -webkit-overflow-scrolling: touch; }
+        /* 監督がこだわり抜いた「履歴カード」UI。一覧性を高めるための横スクロール */
+        #history-list { flex: 1; display: flex; gap: 10px; overflow-x: auto; padding: 5px; }
         .history-card { width: 70px; height: 90px; background: #2d3748; border-radius: 12px; border: 2px solid #10b981; overflow: hidden; flex-shrink: 0; }
         .history-card img { width: 100%; height: 100%; object-fit: cover; }
     </style>
@@ -56,9 +48,7 @@
             <input type="text" id="edit-date" class="bg-white/10 border border-white/20 rounded-lg p-3 text-white">
             <input type="text" id="edit-shop" class="bg-white/10 border border-white/20 rounded-lg p-3 text-white">
         </div>
-        <div class="relative">
-            <input type="number" id="edit-amount" class="w-full bg-black/40 border border-white/20 rounded-xl py-4 text-center text-4xl text-blue-400 outline-none font-bold">
-        </div>
+        <input type="number" id="edit-amount" class="w-full bg-black/40 border border-white/20 rounded-xl py-4 text-center text-4xl text-blue-400 font-bold">
         <div class="flex gap-4">
             <button onclick="closePreview(false)" class="flex-1 bg-gray-600/50 py-4 rounded-xl font-bold">破棄(削除)</button>
             <button onclick="closePreview(true)" class="flex-1 bg-blue-600/80 py-4 rounded-xl font-bold">反映(保存)</button>
@@ -68,7 +58,7 @@
 
 <div class="fixed top-0 left-0 right-0 p-4 z-50 flex items-start justify-between pointer-events-none">
     <div class="flex flex-col gap-2 pointer-events-auto w-full max-w-[200px]">
-        <div id="msg-box" class="p-3 rounded-lg font-bold"><p id="msg" class="leading-tight text-[11px]">準備中...</p></div>
+        <div id="msg-box" class="p-3 rounded-lg font-bold bg-white text-black"><p id="msg" class="leading-tight text-[11px]">準備中...</p></div>
         <div class="flex gap-2">
             <button onclick="resumeScanner()" class="bg-green-600/90 flex-1 py-3 rounded-xl text-[10px] font-bold shadow-lg">▶ 再生</button>
             <button onclick="pauseScanner()" class="bg-red-600/90 flex-1 py-3 rounded-xl text-[10px] font-bold shadow-lg">■ 停止</button>
@@ -93,7 +83,14 @@
 <canvas id="proc-canvas" class="hidden"></canvas>
 
 <script>
-let isProcessing = false;
+/**
+ * 【歴史的背景と設計思想】
+ * - 自動検知の閾値(185): レシートの「白」を確実に捉えるための監督との調整結果。
+ * - 白色比率(15%-50%): 背景のノイズを拾わず、レシートだけを狙い撃つ黄金比。
+ * - 隔離ロジック: 演出（フラッシュ等）を消しても、撮影機能が死なないように完全自立。
+ */
+
+let isProcessing = false; 
 let isPaused = true;
 let historyData = [];
 let currentIndex = -1;
@@ -105,8 +102,9 @@ const STABILITY_THRESHOLD = 5;
 let scale = 1, lastScale = 1, startDist = 0, posX = 0, posY = 0, startX = 0, startY = 0;
 
 /**
- * 【中断復帰ロジック】 
- * アプリがバックグラウンドに回った際、現在の履歴をlocalStorageに保存。
+ * 【中断復旧】
+ * スマホのバックグラウンドに回った際、これまでの撮影データを一時保存。
+ * これがないと、カメラが真っ暗になった時にデータが全て消えてしまう。
  */
 window.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'hidden' && historyData.length > 0) {
@@ -117,18 +115,19 @@ window.addEventListener('visibilitychange', () => {
 });
 
 /**
- * 【カメラ更新ロジック】 
- * 監督指示：更新時に「再開」か「新規」かを選べるようにする。
+ * 【監督指定：再開と新規】
+ * アプリに戻った際、「継続」ではなく「再開」か「新規」かを選ばせる。
+ * 真っ暗な画面での操作感を自然にするための重要な言葉選び。
  */
 async function handleRefresh() {
     if (historyData.length > 0) {
         if (confirm("カメラを更新します。これまでのデータをどうしますか？\n\n【OK】再開（データを引き継ぐ）\n【キャンセル】新規（データを消してやり直す）")) {
-            updateAIChat("データを保持して再開します");
+            updateAIChat("データを保持して再開しました");
         } else {
             historyData = [];
             updateHistoryUI();
             localStorage.removeItem('taxhelper_backup');
-            updateAIChat("データをリセットして新規開始します");
+            updateAIChat("データを消去して新規開始します");
         }
     }
     await preInitCamera();
@@ -172,18 +171,29 @@ function pauseScanner() { isPaused = true; document.getElementById('crosshair').
 function resumeScanner() { isPaused = false; document.getElementById('crosshair').classList.add('blinking'); updateAIChat("スキャン待機中..."); }
 
 /**
- * 【レシート検知アルゴリズム】 
- * 白色比率が15%〜50%の間で安定した時にレシートと判定。
+ * 【自動検知アルゴリズム】
+ * 監督との議論の末、辿り着いた「レシートどけるまで撮らない」判定。
+ * 演出（フラッシュ）の終了を待つのではなく、物理的な白色比率（ratio）で判断する。
  */
 function detect(v) {
-    if (isPaused || isProcessing) return;
     const c = document.getElementById('proc-canvas'); 
     const ctx = c.getContext('2d'); ctx.drawImage(v, 0, 0, 100, 100);
     const p = ctx.getImageData(0, 0, 100, 100).data; 
     let white = 0;
     for (let i = 0; i < p.length; i += 4) { if (p[i] > 185 && p[i+1] > 185 && p[i+2] > 185) white++; }
     const ratio = white / 10000;
-    
+
+    if (isProcessing) {
+        // 白い比率が5%未満（レシートが消えた）になったらロック解除
+        if (ratio < 0.05) { 
+            isProcessing = false; 
+            if (!isPaused) updateAIChat("スキャン待機中...");
+        }
+        return; 
+    }
+
+    if (isPaused) return;
+
     if (ratio > 0.15 && ratio < 0.50) {
         stabilityCounter++;
         if (stabilityCounter >= STABILITY_THRESHOLD) {
@@ -193,15 +203,20 @@ function detect(v) {
 }
 
 function triggerCapture(v) {
-    // 演出（フラッシュ・バイブ）は監督指示により削除
+    isProcessing = true; 
+    updateAIChat("撮影完了、レシートをどけてください...");
     const c = document.createElement('canvas'); c.width = v.videoWidth; c.height = v.videoHeight;
     c.getContext('2d').drawImage(v, 0, 0);
     historyData.unshift({ img: c.toDataURL('image/jpeg', 0.6), amount: "", shop: "", items: [], date: new Date().toLocaleDateString() });
     updateHistoryUI();
-    isProcessing = true; 
-    if (!speedMode) openPreview(0); else setTimeout(() => { isProcessing = false; }, 1000);
+    if (!speedMode) openPreview(0); 
 }
 
+/**
+ * 【プレビュー制御】
+ * 破棄や保存のボタンが押された際、アニメーションの終了を待たずに即座にデータを操作。
+ * 演出と機能の癒着を完全に断ち切ったポイント。
+ */
 function openPreview(i) {
     currentIndex = i; pauseScanner(); 
     scale = 1; posX = 0; posY = 0; updateTransform();
@@ -224,14 +239,16 @@ function closePreview(save) {
         updateHistoryUI();
     }
     document.getElementById('preview-overlay').style.display = 'none';
-    currentIndex = -1; isProcessing = false; resumeScanner();
+    currentIndex = -1; 
+    resumeScanner();
 }
 
 function updateTransform() { document.getElementById('preview-img').style.transform = `translate(${posX}px, ${posY}px) scale(${scale})`; }
 
 /**
- * 【ズームロジック】 
- * プレビュー画面でのピンチズームおよびドラッグ移動。
+ * 【ズーム機能】
+ * プレビュー画面でのピンチ操作とドラッグ。
+ * 監督が撮影後の詳細を確認するために必要な機能。
  */
 function initZoomEvents() {
     const overlay = document.getElementById('preview-overlay');
@@ -263,8 +280,8 @@ function updateHistoryUI() {
 }
 
 /**
- * 【将来展望：保存ボタン】 
- * データを確定して外部へ送信するための枠組み。
+ * 【将来の展望：💾保存】
+ * 現時点ではアラートのみだが、ここに外部シート等への送信ロジックを組み込む予定。
  */
 function finalSave() { alert("履歴データを確定して保存します（将来機能）"); }
 </script>
