@@ -3,33 +3,30 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>TaxHelper Pro v2.8.5</title>
+    <title>TaxHelper Pro v2.8.7</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        .crosshair { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 44px; height: 44px; z-index: 20; pointer-events: none; }
+        /* 十字キーを画面中央に配置 */
+        .crosshair { 
+            position: absolute; 
+            top: 50%; 
+            left: 50%; 
+            transform: translate(-50%, -50%); 
+            width: 44px; 
+            height: 44px; 
+            z-index: 20; 
+            pointer-events: none; 
+        }
         .crosshair-line { position: absolute; background-color: #4ade80; box-shadow: 0 0 0 1px rgba(0,0,0,0.8); }
         .crosshair-h { top: 21px; left: 0; width: 44px; height: 2px; }
         .crosshair-v { top: 0; left: 21px; width: 2px; height: 44px; }
         @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.2; } }
         .blinking { animation: blink 1.2s infinite; }
         
-        /* 【演出修正】フラッシュの視認性を向上 */
-        #shutter-flash { 
-            position: absolute; 
-            inset: 0; 
-            background: white; 
-            opacity: 0; 
-            pointer-events: none; 
-            z-index: 100; /* 最前面に */
-        }
-        .flash-active { 
-            opacity: 0.8 !important; 
-            transition: none !important; 
-        }
-        .flash-out {
-            opacity: 0;
-            transition: opacity 0.15s ease-out !important;
-        }
+        /* 演出用: シャッターフラッシュ */
+        #shutter-flash { position: absolute; inset: 0; background: white; opacity: 0; pointer-events: none; z-index: 100; }
+        .flash-active { opacity: 0.8 !important; transition: none !important; }
+        .flash-out { opacity: 0; transition: opacity 0.15s ease-out !important; }
 
         #preview-overlay { position: fixed; inset: 0; z-index: 200; display: none; background: rgba(0,0,0,0.9); touch-action: none; }
         .preview-viewport { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; overflow: hidden; padding-bottom: 320px; background: #000; }
@@ -95,12 +92,12 @@
     <button class="bg-black/60 p-3 rounded-full border border-white/20 text-xl pointer-events-auto">⚙</button>
 </div>
 
-<div id="camera-container" class="flex-1 relative bg-black">
+<div id="camera-container" class="flex-1 relative bg-black overflow-hidden flex items-center justify-center">
     <div id="shutter-flash"></div>
     <div id="crosshair" class="crosshair"><div class="crosshair-line crosshair-h"></div><div class="crosshair-line crosshair-v"></div></div>
 </div>
 
-<div class="fixed bottom-0 left-0 right-0 z-[50] bg-gradient-to-t from-black pt-16 pb-8 px-4 flex items-end gap-3 pointer-events-none">
+<div class="fixed bottom-0 left-0 right-0 z-[50] bg-gradient-to-t from-black/60 pt-10 pb-8 px-4 flex items-end gap-3 pointer-events-none">
     <button class="flex-none w-16 h-16 rounded-2xl bg-green-600 flex items-center justify-center pointer-events-auto active:scale-90 text-2xl btn-disabled" onclick="finalSave()">💾</button>
     <div id="history-list" class="pointer-events-auto"></div>
 </div>
@@ -181,12 +178,12 @@ function detect(v) {
     if (isPaused) return;
 
     // --- 2.7.7 ロジックコメント ---
-    // 軽量スキャンのためのキャンバス処理
+    // 軽量スキャンのためのキャンバス処理（100x100に縮小して計算負荷を軽減）
     const c = document.getElementById('proc-canvas'); 
     const ctx = c.getContext('2d'); ctx.drawImage(v, 0, 0, 100, 100);
     const p = ctx.getImageData(0, 0, 100, 100).data; 
     let white = 0;
-    // 白色ピクセルの比率でレシートを検知
+    // 白色ピクセルの比率でレシートを検知（185以上の輝度をカウント）
     for (let i = 0; i < p.length; i += 4) { if (p[i] > 185 && p[i+1] > 185 && p[i+2] > 185) white++; }
     const ratio = white / 10000;
     
@@ -212,9 +209,8 @@ function detect(v) {
     }
 }
 
-// 物理的な撮影動作（音・光・振動）とデータ保存を統合
+// 物理演出（音・光・振動）とデータのカード化処理
 function triggerCapture(v) {
-    // 1. 音演出
     if(audioCtx && !isPaused) {
         const o = audioCtx.createOscillator(); const g = audioCtx.createGain();
         o.type = 'sine'; o.frequency.setValueAtTime(880, audioCtx.currentTime);
@@ -222,12 +218,8 @@ function triggerCapture(v) {
         o.connect(g); g.connect(audioCtx.destination); o.start(); o.stop(audioCtx.currentTime + 0.1);
     }
     
-    // 2. 触覚演出（バイブレーション - 認識しやすい50msに変更）
-    if (navigator.vibrate) {
-        navigator.vibrate(50);
-    }
+    if (navigator.vibrate) navigator.vibrate(50);
 
-    // 3. 視覚演出（フラッシュ - transitionを切り替えて視認性アップ）
     const flash = document.getElementById('shutter-flash');
     flash.classList.remove('flash-out');
     flash.classList.add('flash-active');
@@ -236,9 +228,10 @@ function triggerCapture(v) {
         flash.classList.add('flash-out');
     }, 40);
 
-    // 4. データ保存
     const c = document.createElement('canvas'); c.width = v.videoWidth; c.height = v.videoHeight;
     c.getContext('2d').drawImage(v, 0, 0);
+    
+    // スキャンしたデータのカード化処理（unshiftで配列の先頭に追加）
     historyData.unshift({ img: c.toDataURL('image/jpeg', 0.6), amount: "", shop: "", items: [], date: new Date().toLocaleDateString() });
     updateHistoryUI();
     isProcessing = true; 
@@ -247,10 +240,14 @@ function triggerCapture(v) {
     else updateAIChat("バッチリ！レシートを退けてね");
 }
 
+// プレビュー画面の展開（ズームリセットとデータ反映）
 function openPreview(i) {
     currentIndex = i;
     pauseScanner(); 
+    
+    // ズームと位置を初期状態にリセット
     scale = 1; posX = 0; posY = 0; updateTransform();
+    
     const it = historyData[i]; 
     document.getElementById('preview-img').src = it.img;
     document.getElementById('edit-date').value = it.date; 
@@ -300,7 +297,7 @@ function initZoomEvents() {
     }, {passive: false});
 }
 
-// 履歴トレイのUI更新処理（カード化）
+// 履歴トレイのUI更新処理（カード要素の作成とイベント付与）
 function updateHistoryUI() {
     const l = document.getElementById('history-list'); l.innerHTML = "";
     historyData.forEach((d, i) => {
@@ -309,7 +306,11 @@ function updateHistoryUI() {
     });
 }
 
-function finalSave() { console.log("Future Cloud Save"); }
+// 保存クリーンアップ用メモ（クラウド送信成功後に実行すべき手順）
+// 1. localStorage.removeItem('taxhelper_backup') 
+// 2. historyData = [] 
+// 3. updateHistoryUI()
+function finalSave() { console.log("Future Cloud Save and State Reset"); }
 
 function toggleMsg() { document.getElementById('msg-box').classList.toggle('minimized'); }
 </script>
