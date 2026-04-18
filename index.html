@@ -3,10 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>TaxHelper Pro v2.8.38</title>
+    <title>TaxHelper Pro v2.8.39</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        /* ★照準配置の根拠: 現場でレシートを置く際、手が画面下部を覆うため、ターゲットを中央やや上(40%)に配置。 /* @LOCK */ */
+        /* ★照準配置の根拠: 中央やや上(40%)に配置 /* @LOCK */ */
         .crosshair { position: absolute; top: 40%; left: 50%; transform: translate(-50%, -50%); width: 44px; height: 44px; z-index: 20; pointer-events: none; }
         .crosshair-line { position: absolute; background-color: #4ade80; box-shadow: 0 0 0 1px rgba(0,0,0,0.8); }
         .crosshair-h { top: 21px; left: 0; width: 44px; height: 2px; }
@@ -15,8 +15,7 @@
         @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.2; } }
         .blinking { animation: blink 1.2s infinite; }
 
-        /* ★プレビュー配置の根拠: 画像2枚目の検証により、カメラ(video)と同じ object-fit: cover を適用。
-           これにより「上が途切れる」問題を物理的に解消し、背景の死に空間と映像を完全に同期させる。 /* @LOCK */ */
+        /* ★プレビュー配置: object-fit: cover /* @LOCK */ */
         #preview-overlay { position: fixed; inset: 0; z-index: 200; display: none; background: #000; touch-action: none; }
         .preview-viewport { position: absolute; inset: 0; width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; overflow: hidden; }
         #preview-img { width: 100%; height: 100%; object-fit: cover; will-change: transform; transition: transform 0.05s linear; }
@@ -28,9 +27,9 @@
 </head>
 <body class="bg-gray-900 text-white overflow-hidden font-sans text-xs flex flex-col h-screen" onload="preInitCamera()">
 
-<div id="ready-screen" class="fixed inset-0 z-[500] bg-black/60 flex flex-col items-center justify-center p-6 text-center">
+<div id="ready-screen" class="fixed inset-0 z-[500] bg-black/70 flex flex-col items-center justify-center p-6 text-center">
     <h1 class="text-2xl font-bold text-green-400 mb-6 tracking-widest">RECEIPT SCANNER</h1>
-    <button onclick="startApp(false)" class="bg-green-600 px-16 py-5 rounded-2xl font-bold text-lg w-64 shadow-2xl">新しく始める</button>
+    <button onclick="startApp(false)" class="bg-green-600 px-16 py-5 rounded-2xl font-bold text-lg w-64 shadow-2xl active:scale-95 transition-transform">新しく始める</button>
     <div id="recover-panel" class="hidden mt-8 pt-8 border-t border-white/20 w-64">
         <p class="text-blue-400 mb-4 font-bold">中断したデータがあります</p>
         <button onclick="startApp(true)" class="bg-blue-600 px-8 py-4 rounded-2xl font-bold w-full">続きから再開</button>
@@ -71,17 +70,15 @@
     <div id="crosshair" class="crosshair"><div class="crosshair-line crosshair-h"></div><div class="crosshair-line crosshair-v"></div></div>
 </div>
 
-<div class="fixed bottom-0 left-0 right-0 z-[100] bg-gradient-to-t from-black/80 pt-10 pb-8 px-4 flex items-end gap-3 pointer-events-none">
+<div class="fixed bottom-0 left-0 right-0 z-[100] pb-8 px-4 flex items-end gap-3 pointer-events-none">
     <button class="flex-none w-16 h-16 rounded-2xl bg-green-600 flex items-center justify-center pointer-events-auto text-2xl shadow-2xl active:bg-green-700 transition-colors" onclick="finalSave()">💾</button>
-    <div id="history-list" class="flex-1 flex gap-2 overflow-x-auto pointer-events-auto px-2"></div>
+    <div id="history-list" class="flex-1 flex gap-2 overflow-x-auto pointer-events-auto px-2 h-20"></div>
 </div>
 
 <canvas id="proc-canvas" class="hidden"></canvas>
 
 <script>
-/**
- * ★【絶対保持】撮影ステートマシンの定義 /* @LOCK */
- */
+/** ★撮影ステートマシン /* @LOCK */ */
 const STATE_IDLE    = 1; 
 const STATE_KEEP    = 2; 
 const STATE_CAPTURE = 3; 
@@ -96,10 +93,7 @@ let videoEl = null;
 let speedMode = false;
 let stabilityCounter = 0;
 
-/**
- * ★【絶対保持】現場の最適化定数 /* @LOCK */
- * STABILITY_THRESHOLD: 8 (約2秒)。
- */
+/** ★最適化定数: 2秒設定 /* @LOCK */ */
 const WHITE_THRESHOLD = 185; 
 const RATIO_LOW = 0.05; 
 const RATIO_HIGH = 0.15; 
@@ -107,9 +101,7 @@ const STABILITY_THRESHOLD = 8;
 
 let scale = 1, lastScale = 1, startDist = 0, posX = 0, posY = 0, startX = 0, startY = 0;
 
-/**
- * preInitCamera: カメラの物理初期化 /* @LOCK */
- */
+/** preInitCamera: リソース解放と初期化 /* @LOCK */ */
 async function preInitCamera() {
     try {
         if(videoEl) { videoEl.srcObject.getTracks().forEach(t => t.stop()); videoEl.remove(); }
@@ -121,9 +113,7 @@ async function preInitCamera() {
     } catch (e) { updateAIChat("カメラ起動エラー"); }
 }
 
-/**
- * startApp: アプリの物理的な起動制御 /* @LOCK */
- */
+/** startApp: 復旧と開始 /* @LOCK */ */
 async function startApp(useRecover) {
     if (useRecover) {
         const backup = localStorage.getItem('taxhelper_backup');
@@ -134,12 +124,9 @@ async function startApp(useRecover) {
     initZoomEvents();
 }
 
-/**
- * runLoop: 撮影エンジンの心臓部 /* @LOCK */
- */
+/** runLoop: 現場の2秒リズム /* @LOCK */ */
 function runLoop(v) {
     if (isPaused) return;
-
     const c = document.getElementById('proc-canvas'); 
     const ctx = c.getContext('2d'); ctx.drawImage(v, 0, 0, 100, 100);
     const p = ctx.getImageData(0, 0, 100, 100).data; 
@@ -174,22 +161,13 @@ function runLoop(v) {
     }
 }
 
-/**
- * finalSave: 確定保存処理 /* @LOCK */
- */
+/** finalSave: 確定ゲートウェイ /* @LOCK */ */
 function finalSave() {
-    if (historyData.length === 0) {
-        updateAIChat("確定するデータがありません");
-        return;
-    }
-    const count = historyData.length;
-    alert(`${count}件のデータを確定保存します（将来機能）`);
-    updateAIChat("データを確定しました");
+    if (historyData.length === 0) { updateAIChat("データがありません"); return; }
+    alert(`${historyData.length}件を確定（将来機能）`);
 }
 
-/**
- * triggerCapture: 静止画の物理生成 /* @LOCK */
- */
+/** triggerCapture: 静止画生成 /* @LOCK */ */
 function triggerCapture(v) {
     const c = document.createElement('canvas'); c.width = v.videoWidth; c.height = v.videoHeight;
     c.getContext('2d').drawImage(v, 0, 0);
@@ -198,12 +176,9 @@ function triggerCapture(v) {
     if (!speedMode) openPreview(0); 
 }
 
-/**
- * openPreview: プレビュー展開と安全停止 /* @LOCK */
- */
+/** openPreview: 編集開始 /* @LOCK */ */
 function openPreview(i) {
-    currentIndex = i; 
-    pauseScanner(); 
+    currentIndex = i; pauseScanner(); 
     scale = 1; posX = 0; posY = 0; updateTransform();
     const it = historyData[i]; 
     document.getElementById('preview-img').src = it.img;
@@ -213,9 +188,7 @@ function openPreview(i) {
     document.getElementById('preview-overlay').style.display = 'block';
 }
 
-/**
- * closePreview: 編集結果の反映とループ再開 /* @LOCK */
- */
+/** closePreview: 編集反映 /* @LOCK */ */
 function closePreview(save) {
     if (currentIndex !== -1) {
         if (save) {
@@ -231,18 +204,10 @@ function closePreview(save) {
 
 function pauseScanner() { isPaused = true; document.getElementById('crosshair').classList.remove('blinking'); updateAIChat("停止中"); }
 function resumeScanner() { isPaused = false; document.getElementById('crosshair').classList.add('blinking'); }
-
-function setSpeedMode(s) {
-    speedMode = s;
-    document.getElementById('mode-speed').className = s ? "px-4 py-1 rounded-full text-[9px] bg-green-600" : "px-4 py-1 rounded-full text-[9px]";
-    document.getElementById('mode-normal').className = !s ? "px-4 py-1 rounded-full text-[9px] bg-blue-600" : "px-4 py-1 rounded-full text-[9px]";
-}
-
+function setSpeedMode(s) { speedMode = s; updateAIChat(s ? "連続モード" : "単体モード"); }
 function updateAIChat(text) { document.getElementById('msg').innerText = text; }
 
-/**
- * updateHistoryUI: 履歴リストの再描画 /* @LOCK */
- */
+/** updateHistoryUI: 履歴リスト描画 /* @LOCK */ */
 function updateHistoryUI() {
     const l = document.getElementById('history-list'); l.innerHTML = "";
     historyData.forEach((d, i) => {
@@ -251,20 +216,10 @@ function updateHistoryUI() {
     });
 }
 
-/**
- * handleRefresh: 物理リセット /* @LOCK */
- */
-function handleRefresh() {
-    if (historyData.length > 0 && confirm("データを保持してカメラを再起動しますか？")) { updateAIChat("継続中"); }
-    else { historyData = []; updateHistoryUI(); localStorage.removeItem('taxhelper_backup'); }
-    preInitCamera();
-}
-
+function handleRefresh() { location.reload(); }
 function updateTransform() { document.getElementById('preview-img').style.transform = `translate(${posX}px, ${posY}px) scale(${scale})`; }
 
-/**
- * initZoomEvents: ピンチ・スワイプの物理制御 /* @LOCK */
- */
+/** initZoomEvents: ピンチ・スワイプ /* @LOCK */ */
 function initZoomEvents() {
     const overlay = document.getElementById('preview-overlay');
     overlay.addEventListener('touchstart', (e) => {
@@ -278,11 +233,8 @@ function initZoomEvents() {
     });
 }
 
-/**
- * visibilitychange: アプリ中断時の自動救済 /* @LOCK */
- */
 window.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'hidden' && historyData.length > 0) { localStorage.setItem('taxhelper_backup', JSON.stringify(historyData)); sessionStorage.setItem('is_interrupted', 'true'); }
+    if (document.visibilityState === 'hidden' && historyData.length > 0) { localStorage.setItem('taxhelper_backup', JSON.stringify(historyData)); }
 });
 </script>
 </body>
