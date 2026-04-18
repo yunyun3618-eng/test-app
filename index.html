@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>TaxHelper Pro v2.8.46</title>
+    <title>TaxHelper Pro v2.8.48</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         .crosshair { position: absolute; top: 40%; left: 50%; transform: translate(-50%, -50%); width: 44px; height: 44px; z-index: 20; pointer-events: none; }
@@ -18,6 +18,23 @@
         #hud-panel { position: absolute; bottom: 30px; left: 12px; right: 12px; background: rgba(30, 41, 59, 0.85); backdrop-filter: blur(12px); border: 1px solid rgba(255,255,255,0.1); border-radius: 24px; padding: 20px; z-index: 210; }
         #msg-box { background: rgba(255, 255, 255, 0.98); color: #111; border-left: 4px solid #10b981; }
         .history-card { width: 70px; height: 90px; background: #2d3748; border-radius: 12px; border: 2px solid #10b981; overflow: hidden; flex-shrink: 0; }
+        
+        /* 枚数バッジのスタイル */
+        #count-badge { 
+            position: absolute; 
+            top: -12px; 
+            left: 50%; 
+            transform: translateX(-50%); 
+            background: #ef4444; 
+            color: white; 
+            font-size: 11px; 
+            font-weight: bold; 
+            padding: 2px 8px; 
+            border-radius: 999px; 
+            border: 2px solid white; 
+            box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+            z-index: 60;
+        }
     </style>
 </head>
 <body class="bg-gray-900 text-white overflow-hidden font-sans text-xs flex flex-col h-screen" onload="preInitCamera()">
@@ -26,10 +43,6 @@
     <div id="ready-content">
         <h1 class="text-2xl font-bold text-green-400 mb-2 tracking-widest text-center">RECEIPT SCANNER</h1>
         <button onclick="startApp(false)" class="bg-green-600 px-16 py-5 rounded-2xl font-bold text-lg w-64 shadow-2xl">新しく始める</button>
-    </div>
-    <div id="recover-panel" class="hidden mt-8 pt-8 border-t border-white/20 w-64">
-        <p class="text-blue-400 mb-4 font-bold text-center">中断したデータがあります</p>
-        <button onclick="startApp(true)" class="bg-blue-600 px-8 py-4 rounded-2xl font-bold w-full">続きから再開</button>
     </div>
 </div>
 
@@ -68,7 +81,10 @@
 </div>
 
 <div class="fixed bottom-0 left-0 right-0 z-[50] bg-gradient-to-t from-black/80 pt-10 pb-8 px-4 flex items-end gap-3 pointer-events-none">
-    <button class="flex-none w-16 h-16 rounded-2xl bg-green-600 flex items-center justify-center pointer-events-auto text-2xl shadow-2xl active:bg-green-700 transition-colors" onclick="finalSave()">💾</button>
+    <div class="relative flex-none pointer-events-auto">
+        <div id="count-badge" style="display: none;">0</div>
+        <button class="w-16 h-16 rounded-2xl bg-green-600 flex items-center justify-center text-2xl shadow-2xl active:bg-green-700 transition-colors" onclick="finalSave()">💾</button>
+    </div>
     <div id="history-list" class="flex-1 flex gap-2 overflow-x-auto pointer-events-auto px-2"></div>
 </div>
 
@@ -79,7 +95,7 @@ const STATE_IDLE = 1, STATE_KEEP = 2, STATE_CAPTURE = 3, STATE_EJECT = 4, STATE_
 let currentPhase = STATE_IDLE, isPaused = true, historyData = [], currentIndex = -1, videoEl = null, speedMode = false, stabilityCounter = 0;
 
 const WHITE_THRESHOLD = 185, RATIO_LOW = 0.05, RATIO_HIGH = 0.15;
-const STABILITY_THRESHOLD = 10; // ★監督指示：2.5秒(10回一致)へ調整
+const STABILITY_THRESHOLD = 10; // 2.5秒
 
 let scale = 1, lastScale = 1, startDist = 0, posX = 0, posY = 0, startX = 0, startY = 0;
 
@@ -90,15 +106,11 @@ async function preInitCamera() {
         videoEl = document.createElement('video'); videoEl.srcObject = s; videoEl.setAttribute('playsinline', ''); videoEl.play();
         videoEl.className = "w-full h-full object-cover"; document.getElementById('camera-container').prepend(videoEl);
         setInterval(() => { if(!isPaused && videoEl.readyState === 4) runLoop(videoEl); }, 250);
-        updateAIChat("準備完了");
-    } catch (e) { updateAIChat("カメラエラー"); }
+        updateAIChat("カメラ準備完了");
+    } catch (e) { updateAIChat("カメラ起動エラー"); }
 }
 
 async function startApp(useRecover) {
-    if (useRecover) {
-        const backup = localStorage.getItem('taxhelper_backup');
-        if (backup) { historyData = JSON.parse(backup); updateHistoryUI(); }
-    }
     document.getElementById('ready-screen').style.display = 'none';
     resumeScanner(); initZoomEvents();
 }
@@ -114,7 +126,7 @@ function runLoop(v) {
 
     switch (currentPhase) {
         case STATE_IDLE: 
-            updateAIChat("レシート待ち");
+            updateAIChat("レシートを入れてください");
             if (ratio > RATIO_HIGH) { currentPhase = STATE_KEEP; stabilityCounter = 0; }
             break;
         case STATE_KEEP: 
@@ -128,7 +140,7 @@ function runLoop(v) {
             triggerCapture(v); currentPhase = STATE_EJECT; 
             break;
         case STATE_EJECT: 
-            updateAIChat("どけてください");
+            updateAIChat("撮影完了、レシートをどけてください...");
             if (ratio < RATIO_LOW) currentPhase = STATE_RESET;
             break;
         case STATE_RESET: 
@@ -180,7 +192,18 @@ function setSpeedMode(s) {
 function updateAIChat(text) { document.getElementById('msg').innerText = text; }
 
 function updateHistoryUI() {
-    const l = document.getElementById('history-list'); l.innerHTML = "";
+    const l = document.getElementById('history-list');
+    l.innerHTML = "";
+    
+    // 枚数カウントバッジの更新
+    const badge = document.getElementById('count-badge');
+    if (historyData.length > 0) {
+        badge.innerText = historyData.length;
+        badge.style.display = 'block';
+    } else {
+        badge.style.display = 'none';
+    }
+
     historyData.forEach((d, i) => {
         const card = document.createElement('div'); card.className = "history-card"; card.onclick = () => openPreview(i);
         card.innerHTML = `<img src="${d.img}" class="w-full h-full object-cover">`; l.appendChild(card);
