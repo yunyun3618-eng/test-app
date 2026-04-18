@@ -3,24 +3,29 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>TaxHelper Pro v2.8.31</title>
+    <title>TaxHelper Pro v2.8.33</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        /* ★スタイル定義：ターゲットポイントは中央やや上に固定。プレビューもこれに合わせる。 */
+        /* ★ターゲットポイント：画面中央やや上(40%)。現場で最もレシートを捉えやすい位置に固定。 */
         .crosshair { position: absolute; top: 40%; left: 50%; transform: translate(-50%, -50%); width: 44px; height: 44px; z-index: 20; pointer-events: none; }
         .crosshair-line { position: absolute; background-color: #4ade80; box-shadow: 0 0 0 1px rgba(0,0,0,0.8); }
         .crosshair-h { top: 21px; left: 0; width: 44px; height: 2px; }
         .crosshair-v { top: 0; left: 21px; width: 2px; height: 44px; }
+        
+        /* 動作中を示す視覚的フィードバック（点滅） */
         @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.2; } }
         .blinking { animation: blink 1.2s infinite; }
 
-        /* ★プレビュー画面の修正：カメラと同じobject-coverを適用し、画面全体を使い切る配置へ */
+        /* ★プレビュー画面：カメラ(video)とobject-fitを完全に一致させ、「上が途切れる」不具合を解消。 */
+        /* 背景は死に空間を遮断するため完全な黒(#000)。 */
         #preview-overlay { position: fixed; inset: 0; z-index: 200; display: none; background: #000; touch-action: none; }
         .preview-viewport { position: absolute; inset: 0; width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; overflow: hidden; }
-        #preview-img { width: 100%; height: 100%; object-fit: cover; will-change: transform; }
+        #preview-img { width: 100%; height: 100%; object-fit: cover; will-change: transform; transition: transform 0.05s linear; }
 
+        /* 操作パネル：片手操作を想定した下部配置。 */
         #hud-panel { position: absolute; bottom: 30px; left: 12px; right: 12px; background: rgba(30, 41, 59, 0.85); backdrop-filter: blur(12px); border: 1px solid rgba(255,255,255,0.1); border-radius: 24px; padding: 20px; z-index: 210; }
         #msg-box { background: rgba(255, 255, 255, 0.98); color: #111; border-left: 4px solid #10b981; }
+        
         .history-card { width: 70px; height: 90px; background: #2d3748; border-radius: 12px; border: 2px solid #10b981; overflow: hidden; flex-shrink: 0; }
     </style>
 </head>
@@ -80,8 +85,12 @@
 
 <script>
 /**
- * ★撮影ループのステート定義（鉄の掟）
- * 1.受入、2.キープ、3.撮影、4.どけ待ち、5.リセット。
+ * ★撮影ループのステート定義（現場の物理的状態と同期）
+ * 1. STATE_IDLE      : レシート不在。白色面積が低い状態。
+ * 2. STATE_KEEP      : レシート検知。安定カウンタ開始。
+ * 3. STATE_CAPTURE   : ★撮影実行。
+ * 4. STATE_EJECT     : ★どけ待ち。無限撮影バグを殺すための最重要フェーズ。
+ * 5. STATE_RESET     : 次のスキャンへの準備。
  */
 const STATE_IDLE    = 1;
 const STATE_KEEP    = 2;
@@ -98,19 +107,18 @@ let speedMode = false;
 let stabilityCounter = 0;
 
 /**
- * ★物理判定用定数
- * STABILITY_THRESHOLD: 15に引き上げ（約3.75秒〜4秒）。
- * ★目的: レシートを置いてから人間が手を引くための「溜め」を確保し、指の映り込みを防ぐ。
+ * ★物理世界とのマッチング係数
+ * STABILITY_THRESHOLD: 15 (約4秒)。レシートを置いてから指を離すまでの現場の「呼吸」に合わせた待機時間。
  */
 const WHITE_THRESHOLD = 185;
-const RATIO_LOW = 0.05;
-const RATIO_HIGH = 0.15;
-const STABILITY_THRESHOLD = 15; 
+const RATIO_LOW = 0.05;  // これ以下の面積なら「何も置いていない」
+const RATIO_HIGH = 0.15; // これ以上の面積なら「レシートが置かれた」
+const STABILITY_THRESHOLD = 15; // ★指の映り込み防止：監督指示により延長
 
 let scale = 1, lastScale = 1, startDist = 0, posX = 0, posY = 0, startX = 0, startY = 0;
 
 /**
- * ★preInitCamera: カメラの物理的確保
+ * カメラ初期化。古いストリームの完全停止と、object-coverによる視認性確保を同時に行う。
  */
 async function preInitCamera() {
     try {
@@ -118,11 +126,15 @@ async function preInitCamera() {
         const s = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment", width: { ideal: 1280 } } });
         videoEl = document.createElement('video'); videoEl.srcObject = s; videoEl.setAttribute('playsinline', ''); videoEl.play();
         videoEl.className = "w-full h-full object-cover"; document.getElementById('camera-container').prepend(videoEl);
+        /* ループ判定：250msおきに現場の状態を監視。 */
         setInterval(() => { if(!isPaused && videoEl.readyState === 4) runLoop(videoEl); }, 250);
         updateAIChat("カメラ準備完了");
     } catch (e) { updateAIChat("カメラ起動エラー"); }
 }
 
+/**
+ * アプリの物理的な起動処理。中断復旧のロジックを含む。
+ */
 async function startApp(useRecover) {
     if (useRecover) {
         const backup = localStorage.getItem('taxhelper_backup');
@@ -135,6 +147,7 @@ async function startApp(useRecover) {
 
 /**
  * ★撮影エンジン：runLoop
+ * Phase 2(KEEP)からPhase 3(CAPTURE)への遷移時間を延ばすことで「手の映り込み」を排除する。
  */
 function runLoop(v) {
     if (isPaused) return;
@@ -154,7 +167,8 @@ function runLoop(v) {
         case STATE_KEEP: 
             updateAIChat("スキャン待機中...");
             if (ratio > RATIO_HIGH) {
-                stabilityCounter++;
+                stabilityCounter++; 
+                /* 約4秒間（15回判定）安定すれば、人間は手を離しているとみなし撮影へ。 */
                 if (stabilityCounter >= STABILITY_THRESHOLD) currentPhase = STATE_CAPTURE;
             } else { currentPhase = STATE_IDLE; }
             break;
@@ -164,6 +178,7 @@ function runLoop(v) {
             break;
         case STATE_EJECT: 
             updateAIChat("撮影完了、レシートをどけてください...");
+            /* どけるまで絶対にループを回さないことで、意図しない連続撮影を物理遮断。 */
             if (ratio < RATIO_LOW) currentPhase = STATE_RESET;
             break;
         case STATE_RESET: 
@@ -173,6 +188,9 @@ function runLoop(v) {
     }
 }
 
+/**
+ * 💾ボタン。履歴に溜まった全レシートを最終的な確定データとして書き出す。
+ */
 function finalSave() {
     if (historyData.length === 0) {
         updateAIChat("確定するデータがありません");
@@ -183,6 +201,9 @@ function finalSave() {
     updateAIChat("データを確定しました");
 }
 
+/**
+ * 静止画キャプチャ。Canvasを使用してビデオ解像度で画像を保持。
+ */
 function triggerCapture(v) {
     const c = document.createElement('canvas'); c.width = v.videoWidth; c.height = v.videoHeight;
     c.getContext('2d').drawImage(v, 0, 0);
@@ -191,6 +212,9 @@ function triggerCapture(v) {
     if (!speedMode) openPreview(0); 
 }
 
+/**
+ * プレビュー：スキャナーを停止(pause)し、詳細編集モードへ移行。
+ */
 function openPreview(i) {
     currentIndex = i; 
     pauseScanner(); 
@@ -203,6 +227,9 @@ function openPreview(i) {
     document.getElementById('preview-overlay').style.display = 'block';
 }
 
+/**
+ * プレビュー終了。反映(保存)または破棄(削除)を実行し、スキャナーを再開。
+ */
 function closePreview(save) {
     if (currentIndex !== -1) {
         if (save) {
@@ -241,8 +268,15 @@ function handleRefresh() {
     preInitCamera();
 }
 
+/**
+ * プレビュー画像の移動・拡大(transform)の適用。
+ */
 function updateTransform() { document.getElementById('preview-img').style.transform = `translate(${posX}px, ${posY}px) scale(${scale})`; }
 
+/**
+ * ピンチズーム/スワイプ移動の初期化。
+ * プレビュー画像のみに適用され、UI操作とは干渉しないように設計。
+ */
 function initZoomEvents() {
     const overlay = document.getElementById('preview-overlay');
     overlay.addEventListener('touchstart', (e) => {
@@ -255,6 +289,10 @@ function initZoomEvents() {
         updateTransform();
     });
 }
+
+/**
+ * ブラウザ中断(バックグラウンド移動)時のデータ保護。localStorageに一時バックアップ。
+ */
 window.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'hidden' && historyData.length > 0) { localStorage.setItem('taxhelper_backup', JSON.stringify(historyData)); sessionStorage.setItem('is_interrupted', 'true'); }
 });
