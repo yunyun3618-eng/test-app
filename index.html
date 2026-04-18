@@ -3,10 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>TaxHelper Pro v2.8.42</title>
+    <title>TaxHelper Pro v2.8.44</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        /* ★照準配置の根拠: 現場でレシートを置く際、手が画面下部を覆うため、ターゲットを中央やや上(40%)に配置。 /* @LOCK */ */
+        /* ★【絶対保持】ターゲット：中央やや上(40%)。プレビューもこれに object-fit: cover で同期。 */
         .crosshair { position: absolute; top: 40%; left: 50%; transform: translate(-50%, -50%); width: 44px; height: 44px; z-index: 20; pointer-events: none; }
         .crosshair-line { position: absolute; background-color: #4ade80; box-shadow: 0 0 0 1px rgba(0,0,0,0.8); }
         .crosshair-h { top: 21px; left: 0; width: 44px; height: 2px; }
@@ -15,7 +15,7 @@
         @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.2; } }
         .blinking { animation: blink 1.2s infinite; }
 
-        /* ★プレビュー配置の根拠: 画像2枚目の検証により、カメラ(video)と同じ object-fit: cover を適用。 /* @LOCK */ */
+        /* ★【絶対保持】プレビュー配置：カメラ映像と100%同期させ、「上が切れる」問題を解消。 */
         #preview-overlay { position: fixed; inset: 0; z-index: 200; display: none; background: #000; touch-action: none; }
         .preview-viewport { position: absolute; inset: 0; width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; overflow: hidden; }
         #preview-img { width: 100%; height: 100%; object-fit: cover; will-change: transform; transition: transform 0.05s linear; }
@@ -27,32 +27,15 @@
 </head>
 <body class="bg-gray-900 text-white overflow-hidden font-sans text-xs flex flex-col h-screen" onload="preInitCamera()">
 
-<div id="ready-screen" class="fixed inset-0 z-[500] bg-black/80 flex flex-col items-center justify-center p-6 text-center">
-    <h1 class="text-2xl font-bold text-green-400 mb-6 tracking-widest">RECEIPT SCANNER</h1>
-    <button onclick="startApp(false)" class="bg-green-600 px-16 py-5 rounded-2xl font-bold text-lg w-64 shadow-2xl">新しく始める</button>
+<div id="ready-screen" class="fixed inset-0 z-[300] bg-black/40 backdrop-blur-sm flex flex-col items-center justify-center p-6 text-center">
+    <div id="ready-content">
+        <h1 class="text-2xl font-bold text-green-400 mb-2 tracking-widest text-center">RECEIPT SCANNER</h1>
+        <button onclick="startApp(false)" class="bg-green-600 px-16 py-5 rounded-2xl font-bold text-lg w-64 shadow-2xl">新しく始める</button>
+    </div>
     <div id="recover-panel" class="hidden mt-8 pt-8 border-t border-white/20 w-64">
         <p class="text-blue-400 mb-4 font-bold text-center">中断したデータがあります</p>
         <button onclick="startApp(true)" class="bg-blue-600 px-8 py-4 rounded-2xl font-bold w-full">続きから再開</button>
     </div>
-</div>
-
-<div id="camera-container" class="flex-1 relative bg-black flex items-center justify-center overflow-hidden">
-    <div id="crosshair" class="crosshair"><div class="crosshair-line crosshair-h"></div><div class="crosshair-line crosshair-v"></div></div>
-</div>
-
-<div class="fixed top-0 left-0 right-0 p-4 z-50 flex flex-col gap-2 pointer-events-none">
-    <div class="bg-white text-black p-3 rounded-lg font-bold w-40 pointer-events-auto shadow-xl">
-        <p id="msg" class="leading-tight text-[11px]">準備中...</p>
-        <div class="flex gap-2 mt-2">
-            <button onclick="resumeScanner()" class="bg-green-600 text-white flex-1 py-2 rounded text-[10px] font-bold">▶再生</button>
-            <button onclick="pauseScanner()" class="bg-red-600 text-white flex-1 py-2 rounded text-[10px] font-bold">■停止</button>
-        </div>
-    </div>
-</div>
-
-<div class="fixed bottom-0 left-0 right-0 z-[100] pb-8 px-4 flex items-end gap-3 pointer-events-none">
-    <button class="flex-none w-16 h-16 rounded-2xl bg-green-600 flex items-center justify-center pointer-events-auto text-2xl shadow-2xl" onclick="finalSave()">💾</button>
-    <div id="history-list" class="flex-1 flex gap-2 overflow-x-auto pointer-events-auto px-2"></div>
 </div>
 
 <div id="preview-overlay">
@@ -64,25 +47,71 @@
         </div>
         <input type="number" id="edit-amount" class="w-full bg-black/40 border border-white/20 rounded-xl py-4 text-center text-4xl text-blue-400 font-bold" placeholder="金額">
         <div class="flex gap-4">
-            <button onclick="closePreview(false)" class="flex-1 bg-gray-600/50 py-4 rounded-xl font-bold">破棄</button>
-            <button onclick="closePreview(true)" class="flex-1 bg-blue-600/80 py-4 rounded-xl font-bold">反映</button>
+            <button onclick="closePreview(false)" class="flex-1 bg-gray-600/50 py-4 rounded-xl font-bold">破棄(削除)</button>
+            <button onclick="closePreview(true)" class="flex-1 bg-blue-600/80 py-4 rounded-xl font-bold">反映(保存)</button>
         </div>
     </div>
+</div>
+
+<div class="fixed top-0 left-0 right-0 p-4 z-50 flex items-start justify-between pointer-events-none">
+    <div class="flex flex-col gap-2 pointer-events-auto w-full max-w-[200px]">
+        <div id="msg-box" class="p-3 rounded-lg font-bold bg-white text-black shadow-xl"><p id="msg" class="leading-tight text-[11px]">準備中...</p></div>
+        <div class="flex gap-2">
+            <button onclick="resumeScanner()" class="bg-green-600/90 flex-1 py-3 rounded-xl text-[10px] font-bold shadow-lg">▶ 再生</button>
+            <button onclick="pauseScanner()" class="bg-red-600/90 flex-1 py-3 rounded-xl text-[10px] font-bold shadow-lg">■ 停止</button>
+        </div>
+        <button onclick="handleRefresh()" class="bg-blue-600 py-3 rounded-xl text-[10px] font-bold border-2 border-white shadow-xl">🔄 カメラ更新</button>
+        <div class="flex bg-black/60 p-1 rounded-full border border-white/20 w-fit mt-1">
+            <button id="mode-speed" onclick="setSpeedMode(true)" class="px-4 py-1 rounded-full text-[9px]">連続スキャン</button>
+            <button id="mode-normal" onclick="setSpeedMode(false)" class="px-4 py-1 rounded-full text-[9px] bg-blue-600">単体スキャン</button>
+        </div>
+    </div>
+</div>
+
+<div id="camera-container" class="flex-1 relative bg-black flex items-center justify-center overflow-hidden">
+    <div id="crosshair" class="crosshair"><div class="crosshair-line crosshair-h"></div><div class="crosshair-line crosshair-v"></div></div>
+</div>
+
+<div class="fixed bottom-0 left-0 right-0 z-[50] bg-gradient-to-t from-black/80 pt-10 pb-8 px-4 flex items-end gap-3 pointer-events-none">
+    <button class="flex-none w-16 h-16 rounded-2xl bg-green-600 flex items-center justify-center pointer-events-auto text-2xl shadow-2xl active:bg-green-700 transition-colors" onclick="finalSave()">💾</button>
+    <div id="history-list" class="flex-1 flex gap-2 overflow-x-auto pointer-events-auto px-2"></div>
 </div>
 
 <canvas id="proc-canvas" class="hidden"></canvas>
 
 <script>
-/** ★撮影ステートマシン /* @LOCK */ */
-const STATE_IDLE=1, STATE_KEEP=2, STATE_CAPTURE=3, STATE_EJECT=4, STATE_RESET=5;
-let currentPhase=STATE_IDLE, isPaused=true, historyData=[], currentIndex=-1, videoEl=null, stabilityCounter=0;
+/**
+ * ★【絶対保持】撮影ステートマシン
+ */
+const STATE_IDLE    = 1; 
+const STATE_KEEP    = 2; 
+const STATE_CAPTURE = 3; 
+const STATE_EJECT   = 4; 
+const STATE_RESET   = 5;
 
-/** ★最適化定数: 2秒設定 (THRESHOLD=8) /* @LOCK */ */
-const WHITE_THRESHOLD=185, RATIO_LOW=0.05, RATIO_HIGH=0.15, STABILITY_THRESHOLD=8; 
+let currentPhase = STATE_IDLE; 
+let isPaused = true;
+let historyData = [];
+let currentIndex = -1;
+let videoEl = null;
+let speedMode = false;
+let stabilityCounter = 0;
 
-let scale=1, lastScale=1, startDist=0, posX=0, posY=0, startX=0, startY=0;
+/**
+ * ★【絶対保持】物理世界との同期
+ * STABILITY_THRESHOLD: 8 (約2秒)。
+ * 根拠: 前回の15(4秒)が長すぎたため、監督指示によりテンポを半分に短縮。指をサッと抜くリズム。
+ */
+const WHITE_THRESHOLD = 185;
+const RATIO_LOW = 0.05; 
+const RATIO_HIGH = 0.15;
+const STABILITY_THRESHOLD = 8; // ★2秒へ短縮
 
-/** preInitCamera: 35の丁寧な初期化を復元 /* @LOCK */ */
+let scale = 1, lastScale = 1, startDist = 0, posX = 0, posY = 0, startX = 0, startY = 0;
+
+/**
+ * カメラ初期化
+ */
 async function preInitCamera() {
     try {
         if(videoEl) { videoEl.srcObject.getTracks().forEach(t => t.stop()); videoEl.remove(); }
@@ -90,97 +119,131 @@ async function preInitCamera() {
         videoEl = document.createElement('video'); videoEl.srcObject = s; videoEl.setAttribute('playsinline', ''); videoEl.play();
         videoEl.className = "w-full h-full object-cover"; document.getElementById('camera-container').prepend(videoEl);
         setInterval(() => { if(!isPaused && videoEl.readyState === 4) runLoop(videoEl); }, 250);
-        document.getElementById('msg').innerText = "準備完了";
-    } catch (e) { document.getElementById('msg').innerText = "カメラエラー"; }
+        updateAIChat("カメラ準備完了");
+    } catch (e) { updateAIChat("カメラ起動エラー"); }
 }
 
-function startApp(useRecover) {
+async function startApp(useRecover) {
     if (useRecover) {
-        const b = localStorage.getItem('taxhelper_backup');
-        if (b) { historyData = JSON.parse(b); updateHistoryUI(); }
+        const backup = localStorage.getItem('taxhelper_backup');
+        if (backup) { historyData = JSON.parse(backup); updateHistoryUI(); }
     }
     document.getElementById('ready-screen').style.display = 'none';
-    isPaused = false; document.getElementById('crosshair').classList.add('blinking');
-    initZoomEvents(); /* ★35にあったズーム初期化を復元 */
+    resumeScanner();
+    initZoomEvents();
 }
 
+/**
+ * ★【絶対保持】撮影エンジン
+ * Phase 2(KEEP)のメッセージを「そのままキープしてね」に変更。
+ */
 function runLoop(v) {
     if (isPaused) return;
-    const c=document.getElementById('proc-canvas'), ctx=c.getContext('2d');
-    ctx.drawImage(v, 0, 0, 100, 100);
-    const p=ctx.getImageData(0, 0, 100, 100).data;
-    let white=0; for(let i=0; i<p.length; i+=4) if(p[i]>WHITE_THRESHOLD && p[i+1]>WHITE_THRESHOLD && p[i+2]>WHITE_THRESHOLD) white++;
+
+    const c = document.getElementById('proc-canvas'); 
+    const ctx = c.getContext('2d'); ctx.drawImage(v, 0, 0, 100, 100);
+    const p = ctx.getImageData(0, 0, 100, 100).data; 
+    let white = 0;
+    for (let i = 0; i < p.length; i += 4) { if (p[i] > WHITE_THRESHOLD && p[i+1] > WHITE_THRESHOLD && p[i+2] > WHITE_THRESHOLD) white++; }
     const ratio = white / 10000;
 
     switch (currentPhase) {
         case STATE_IDLE: 
-            document.getElementById('msg').innerText = "レシート待ち";
+            updateAIChat("レシートを入れてください");
             if (ratio > RATIO_HIGH) { currentPhase = STATE_KEEP; stabilityCounter = 0; }
             break;
         case STATE_KEEP: 
-            document.getElementById('msg').innerText = "そのままキープしてね";
+            updateAIChat("そのままキープしてね"); // ★監督指示による変更
             if (ratio > RATIO_HIGH) {
                 stabilityCounter++; 
                 if (stabilityCounter >= STABILITY_THRESHOLD) currentPhase = STATE_CAPTURE;
             } else { currentPhase = STATE_IDLE; }
             break;
         case STATE_CAPTURE: 
-            triggerCapture(v); currentPhase = STATE_EJECT; 
+            triggerCapture(v);
+            currentPhase = STATE_EJECT; 
             break;
         case STATE_EJECT: 
-            document.getElementById('msg').innerText = "どけてください";
+            updateAIChat("撮影完了、レシートをどけてください...");
             if (ratio < RATIO_LOW) currentPhase = STATE_RESET;
             break;
-        case STATE_RESET: stabilityCounter=0; currentPhase=STATE_IDLE; break;
+        case STATE_RESET: 
+            stabilityCounter = 0;
+            currentPhase = STATE_IDLE; 
+            break;
     }
 }
 
+function finalSave() {
+    if (historyData.length === 0) {
+        updateAIChat("確定するデータがありません");
+        return;
+    }
+    const count = historyData.length;
+    alert(`${count}件のデータを確定保存します（将来機能）`);
+    updateAIChat("データを確定しました");
+}
+
 function triggerCapture(v) {
-    const c=document.createElement('canvas'); c.width=v.videoWidth; c.height=v.videoHeight;
+    const c = document.createElement('canvas'); c.width = v.videoWidth; c.height = v.videoHeight;
     c.getContext('2d').drawImage(v, 0, 0);
-    historyData.unshift({ img: c.toDataURL('image/jpeg', 0.6), amount: "", shop: "", date: new Date().toLocaleDateString() });
-    updateHistoryUI(); openPreview(0); 
+    historyData.unshift({ img: c.toDataURL('image/jpeg', 0.6), amount: "", shop: "", items: [], date: new Date().toLocaleDateString() });
+    updateHistoryUI();
+    if (!speedMode) openPreview(0); 
 }
 
 function openPreview(i) {
-    currentIndex=i; isPaused=true;
-    scale=1; posX=0; posY=0; updateTransform();
-    const it=historyData[i];
-    document.getElementById('preview-img').src=it.img;
-    document.getElementById('edit-date').value=it.date;
-    document.getElementById('edit-shop').value=it.shop;
-    document.getElementById('edit-amount').value=it.amount;
-    document.getElementById('preview-overlay').style.display='block';
-    document.getElementById('crosshair').classList.remove('blinking');
+    currentIndex = i; 
+    pauseScanner(); 
+    scale = 1; posX = 0; posY = 0; updateTransform();
+    const it = historyData[i]; 
+    document.getElementById('preview-img').src = it.img;
+    document.getElementById('edit-date').value = it.date; 
+    document.getElementById('edit-shop').value = it.shop;
+    document.getElementById('edit-amount').value = it.amount;
+    document.getElementById('preview-overlay').style.display = 'block';
 }
 
 function closePreview(save) {
-    if (currentIndex !== -1 && save) {
-        const it=historyData[currentIndex];
-        it.date=document.getElementById('edit-date').value;
-        it.shop=document.getElementById('edit-shop').value;
-        it.amount=document.getElementById('edit-amount').value;
-    } else if (currentIndex !== -1) { historyData.splice(currentIndex, 1); }
-    updateHistoryUI(); document.getElementById('preview-overlay').style.display='none';
-    isPaused=false; document.getElementById('crosshair').classList.add('blinking');
+    if (currentIndex !== -1) {
+        if (save) {
+            const it = historyData[currentIndex];
+            it.date = document.getElementById('edit-date').value; it.shop = document.getElementById('edit-shop').value;
+            it.amount = document.getElementById('edit-amount').value;
+        } else historyData.splice(currentIndex, 1);
+        updateHistoryUI();
+    }
+    document.getElementById('preview-overlay').style.display = 'none';
+    currentIndex = -1; resumeScanner(); 
 }
 
-function pauseScanner() { isPaused=true; document.getElementById('crosshair').classList.remove('blinking'); }
-function resumeScanner() { isPaused=false; document.getElementById('crosshair').classList.add('blinking'); }
+function pauseScanner() { isPaused = true; document.getElementById('crosshair').classList.remove('blinking'); updateAIChat("停止中"); }
+function resumeScanner() { isPaused = false; document.getElementById('crosshair').classList.add('blinking'); }
+
+function setSpeedMode(s) {
+    speedMode = s;
+    document.getElementById('mode-speed').className = s ? "px-4 py-1 rounded-full text-[9px] bg-green-600" : "px-4 py-1 rounded-full text-[9px]";
+    document.getElementById('mode-normal').className = !s ? "px-4 py-1 rounded-full text-[9px] bg-blue-600" : "px-4 py-1 rounded-full text-[9px]";
+}
+
+function updateAIChat(text) { document.getElementById('msg').innerText = text; }
 
 function updateHistoryUI() {
-    const l=document.getElementById('history-list'); l.innerHTML="";
+    const l = document.getElementById('history-list'); l.innerHTML = "";
     historyData.forEach((d, i) => {
-        const card=document.createElement('div'); card.className="history-card"; card.onclick=()=>openPreview(i);
-        card.innerHTML=`<img src="${d.img}" class="w-full h-full object-cover">`; l.appendChild(card);
+        const card = document.createElement('div'); card.className = "history-card"; card.onclick = () => openPreview(i);
+        card.innerHTML = `<img src="${d.img}" class="w-full h-full object-cover">`; l.appendChild(card);
     });
 }
 
-function finalSave() { if(historyData.length) alert(historyData.length + "件確定"); }
+function handleRefresh() {
+    if (historyData.length > 0 && confirm("データを保持してカメラを再起動しますか？")) { updateAIChat("継続中"); }
+    else { historyData = []; updateHistoryUI(); localStorage.removeItem('taxhelper_backup'); }
+    preInitCamera();
+}
 
 function updateTransform() { document.getElementById('preview-img').style.transform = `translate(${posX}px, ${posY}px) scale(${scale})`; }
 
-/** ★35のピンチ・ズーム・スワイプ制御を完全復元 /* @LOCK */ */
 function initZoomEvents() {
     const overlay = document.getElementById('preview-overlay');
     overlay.addEventListener('touchstart', (e) => {
@@ -195,7 +258,7 @@ function initZoomEvents() {
 }
 
 window.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'hidden' && historyData.length > 0) { localStorage.setItem('taxhelper_backup', JSON.stringify(historyData)); }
+    if (document.visibilityState === 'hidden' && historyData.length > 0) { localStorage.setItem('taxhelper_backup', JSON.stringify(historyData)); sessionStorage.setItem('is_interrupted', 'true'); }
 });
 </script>
 </body>
