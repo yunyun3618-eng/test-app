@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>TaxHelper Pro v2.8.36</title>
+    <title>TaxHelper Pro v2.8.37</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         /* ★照準配置の根拠: 現場でレシートを置く際、手が画面下部を覆うため、ターゲットを中央やや上(40%)に配置。 /* @LOCK */ */
@@ -28,14 +28,14 @@
 </head>
 <body class="bg-gray-900 text-white overflow-hidden font-sans text-xs flex flex-col h-screen" onload="preInitCamera()">
 
-<div id="ready-screen" class="fixed inset-0 z-[300] bg-black/40 backdrop-blur-sm flex flex-col items-center justify-center p-6 text-center">
+<div id="ready-screen" class="fixed inset-0 z-[999] bg-black/40 backdrop-blur-sm flex flex-col items-center justify-center p-6 text-center">
     <div id="ready-content">
         <h1 class="text-2xl font-bold text-green-400 mb-2 tracking-widest text-center">RECEIPT SCANNER</h1>
-        <button onclick="startApp(false)" class="bg-green-600 px-16 py-5 rounded-2xl font-bold text-lg w-64 shadow-2xl">新しく始める</button>
+        <button onclick="startApp(false)" class="bg-green-600 px-16 py-5 rounded-2xl font-bold text-lg w-64 shadow-2xl pointer-events-auto">新しく始める</button>
     </div>
     <div id="recover-panel" class="hidden mt-8 pt-8 border-t border-white/20 w-64">
         <p class="text-blue-400 mb-4 font-bold text-center">中断したデータがあります</p>
-        <button onclick="startApp(true)" class="bg-blue-600 px-8 py-4 rounded-2xl font-bold w-full">続きから再開</button>
+        <button onclick="startApp(true)" class="bg-blue-600 px-8 py-4 rounded-2xl font-bold w-full pointer-events-auto">続きから再開</button>
     </div>
 </div>
 
@@ -73,7 +73,7 @@
     <div id="crosshair" class="crosshair"><div class="crosshair-line crosshair-h"></div><div class="crosshair-line crosshair-v"></div></div>
 </div>
 
-<div class="fixed bottom-0 left-0 right-0 z-[50] bg-gradient-to-t from-black/80 pt-10 pb-8 px-4 flex items-end gap-3 pointer-events-none">
+<div class="fixed bottom-0 left-0 right-0 z-[250] bg-gradient-to-t from-black/80 pt-10 pb-8 px-4 flex items-end gap-3 pointer-events-none">
     <button class="flex-none w-16 h-16 rounded-2xl bg-green-600 flex items-center justify-center pointer-events-auto text-2xl shadow-2xl active:bg-green-700 transition-colors" onclick="finalSave()">💾</button>
     <div id="history-list" class="flex-1 flex gap-2 overflow-x-auto pointer-events-auto px-2"></div>
 </div>
