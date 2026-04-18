@@ -3,13 +3,13 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>TaxHelper Pro v2.8.7</title>
+    <title>TaxHelper Pro v2.8.16</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        /* 十字キーを画面中央に配置 */
+        /* 【検証】ターゲットポイント：UIの被りを考慮し、50%から「40%」へ引き上げ */
         .crosshair { 
             position: absolute; 
-            top: 50%; 
+            top: 40%; 
             left: 50%; 
             transform: translate(-50%, -50%); 
             width: 44px; 
@@ -23,82 +23,70 @@
         @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.2; } }
         .blinking { animation: blink 1.2s infinite; }
         
-        /* 演出用: シャッターフラッシュ */
-        #shutter-flash { position: absolute; inset: 0; background: white; opacity: 0; pointer-events: none; z-index: 100; }
-        .flash-active { opacity: 0.8 !important; transition: none !important; }
-        .flash-out { opacity: 0; transition: opacity 0.15s ease-out !important; }
-
+        /* プレビュー画面の設定 */
         #preview-overlay { position: fixed; inset: 0; z-index: 200; display: none; background: rgba(0,0,0,0.9); touch-action: none; }
         .preview-viewport { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; overflow: hidden; padding-bottom: 320px; background: #000; }
         #preview-img { touch-action: none; user-select: none; -webkit-user-drag: none; will-change: transform; transition: transform 0.05s linear; }
         #hud-panel { position: absolute; bottom: 30px; left: 12px; right: 12px; background: rgba(30, 41, 59, 0.85); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border: 1px solid rgba(255,255,255,0.1); border-radius: 24px; padding: 20px; z-index: 210; }
-        #msg-box { background: rgba(255, 255, 255, 0.98); color: #111; box-shadow: 0 4px 15px rgba(0,0,0,0.4); border-left: 4px solid #10b981; transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
-        .minimized { height: 0; padding: 0 !important; overflow: hidden; border: none !important; margin: 0 !important; opacity: 0; }
+        #msg-box { background: rgba(255, 255, 255, 0.98); color: #111; box-shadow: 0 4px 15px rgba(0,0,0,0.4); border-left: 4px solid #10b981; }
+        
+        /* 履歴リスト：監督が作り上げたカード化UI */
         #history-list { flex: 1; display: flex; gap: 10px; overflow-x: auto; padding: 5px; -webkit-overflow-scrolling: touch; }
         .history-card { width: 70px; height: 90px; background: #2d3748; border-radius: 12px; border: 2px solid #10b981; overflow: hidden; flex-shrink: 0; }
         .history-card img { width: 100%; height: 100%; object-fit: cover; }
-        
-        .btn-disabled { pointer-events: none !important; opacity: 0.5 !important; filter: grayscale(1); }
     </style>
 </head>
 <body class="bg-gray-900 text-white overflow-hidden font-sans text-xs flex flex-col h-screen" onload="preInitCamera()">
 
 <div id="ready-screen" class="fixed inset-0 z-[300] bg-black/40 backdrop-blur-sm flex flex-col items-center justify-center p-6 text-center">
     <div id="ready-content">
-        <h1 class="text-2xl font-bold text-green-400 mb-2 tracking-widest">RECEIPT SCANNER</h1>
-        <p class="text-gray-200 mb-10 text-sm font-bold shadow-black">スキャンを開始します</p>
-        <button onclick="startApp(false)" class="bg-green-600 px-16 py-5 rounded-2xl font-bold text-lg shadow-2xl active:scale-95 transition-all w-64">スキャン開始</button>
+        <h1 class="text-2xl font-bold text-green-400 mb-2 tracking-widest text-center">RECEIPT SCANNER</h1>
+        <button onclick="startApp(false)" class="bg-green-600 px-16 py-5 rounded-2xl font-bold text-lg w-64">新しく始める</button>
     </div>
     <div id="recover-panel" class="hidden mt-8 pt-8 border-t border-white/20 w-64">
-        <p class="text-blue-400 mb-4 font-bold">中断したデータがあります</p>
-        <button onclick="startApp(true)" class="bg-blue-600 px-8 py-4 rounded-2xl font-bold text-md shadow-2xl active:scale-95 transition-all w-full animate-pulse">前回の続きから再開</button>
+        <p class="text-blue-400 mb-4 font-bold text-center">中断したデータがあります</p>
+        <button onclick="startApp(true)" class="bg-blue-600 px-8 py-4 rounded-2xl font-bold w-full">続きから再開</button>
     </div>
 </div>
 
 <div id="preview-overlay">
-    <div class="preview-viewport"><img id="preview-img" src="" class="max-w-full max-h-full object-contain"></div>
-    <div id="hud-panel" class="space-y-4 max-w-md mx-auto">
+    <div class="preview-viewport"><img id="preview-img" src=""></div>
+    <div id="hud-panel" class="space-y-4 max-w-md mx-auto pointer-events-auto">
         <div class="grid grid-cols-2 gap-3">
             <input type="text" id="edit-date" class="bg-white/10 border border-white/20 rounded-lg p-3 text-white">
-            <input type="text" id="edit-shop" class="bg-white/10 border border-white/20 rounded-lg p-3 text-white" placeholder="店名">
+            <input type="text" id="edit-shop" class="bg-white/10 border border-white/20 rounded-lg p-3 text-white">
         </div>
-        <div id="edit-items-area" class="space-y-2 max-h-32 overflow-y-auto bg-black/20 p-2 rounded-lg"></div>
         <div class="relative">
-            <span class="absolute left-4 top-3 text-blue-400 text-2xl font-bold">¥</span>
-            <input type="number" id="edit-amount" class="w-full bg-black/40 border border-white/20 rounded-xl py-4 pl-12 text-4xl font-mono text-blue-400 outline-none">
+            <input type="number" id="edit-amount" class="w-full bg-black/40 border border-white/20 rounded-xl py-4 text-center text-4xl text-blue-400 outline-none font-bold">
         </div>
         <div class="flex gap-4">
-            <button onclick="closePreview(false)" class="flex-1 bg-gray-600/50 py-4 rounded-xl font-bold">破棄</button>
-            <button onclick="closePreview(true)" class="flex-1 bg-blue-600/80 py-4 rounded-xl font-bold">反映して次へ</button>
+            <button onclick="closePreview(false)" class="flex-1 bg-gray-600/50 py-4 rounded-xl font-bold">破棄(削除)</button>
+            <button onclick="closePreview(true)" class="flex-1 bg-blue-600/80 py-4 rounded-xl font-bold">反映(保存)</button>
         </div>
     </div>
 </div>
 
 <div class="fixed top-0 left-0 right-0 p-4 z-50 flex items-start justify-between pointer-events-none">
-    <div class="flex flex-col gap-2 pointer-events-auto">
-        <div id="msg-box" class="p-3 rounded-lg font-bold transition-all"><p id="msg" class="leading-tight text-[11px]">準備中...</p></div>
+    <div class="flex flex-col gap-2 pointer-events-auto w-full max-w-[200px]">
+        <div id="msg-box" class="p-3 rounded-lg font-bold"><p id="msg" class="leading-tight text-[11px]">準備中...</p></div>
         <div class="flex gap-2">
-            <button onclick="toggleMsg()" class="bg-black/60 p-2.5 rounded-full border border-white/20">▼</button>
-            <div id="main-controls" class="flex gap-2">
-                <button onclick="resumeScanner()" class="bg-green-600/90 px-5 py-1.5 rounded-full text-[10px] font-bold">▶ 再生</button>
-                <button onclick="pauseScanner()" class="bg-red-600/90 px-5 py-1.5 rounded-full text-[10px] font-bold">■ 停止</button>
-            </div>
+            <button onclick="resumeScanner()" class="bg-green-600/90 flex-1 py-3 rounded-xl text-[10px] font-bold shadow-lg">▶ 再生</button>
+            <button onclick="pauseScanner()" class="bg-red-600/90 flex-1 py-3 rounded-xl text-[10px] font-bold shadow-lg">■ 停止</button>
         </div>
-        <div class="flex bg-black/60 p-1 rounded-full border border-white/20 w-fit">
-            <button id="mode-speed" onclick="setSpeedMode(true)" class="px-4 py-1 rounded-full text-[9px] font-bold">連続スキャン</button>
-            <button id="mode-normal" onclick="setSpeedMode(false)" class="px-4 py-1 rounded-full text-[9px] font-bold bg-blue-600">単体スキャン</button>
+        <button onclick="handleRefresh()" class="bg-blue-600 py-3 rounded-xl text-[10px] font-bold border-2 border-white shadow-xl">🔄 カメラ更新・データ選択</button>
+        <div class="flex bg-black/60 p-1 rounded-full border border-white/20 w-fit mt-1">
+            <button id="mode-speed" onclick="setSpeedMode(true)" class="px-4 py-1 rounded-full text-[9px]">連続スキャン</button>
+            <button id="mode-normal" onclick="setSpeedMode(false)" class="px-4 py-1 rounded-full text-[9px] bg-blue-600">単体スキャン</button>
         </div>
     </div>
-    <button class="bg-black/60 p-3 rounded-full border border-white/20 text-xl pointer-events-auto">⚙</button>
 </div>
 
-<div id="camera-container" class="flex-1 relative bg-black overflow-hidden flex items-center justify-center">
-    <div id="shutter-flash"></div>
+<div id="camera-container" class="flex-1 relative bg-black flex items-center justify-center overflow-hidden">
     <div id="crosshair" class="crosshair"><div class="crosshair-line crosshair-h"></div><div class="crosshair-line crosshair-v"></div></div>
 </div>
 
-<div class="fixed bottom-0 left-0 right-0 z-[50] bg-gradient-to-t from-black/60 pt-10 pb-8 px-4 flex items-end gap-3 pointer-events-none">
-    <button class="flex-none w-16 h-16 rounded-2xl bg-green-600 flex items-center justify-center pointer-events-auto active:scale-90 text-2xl btn-disabled" onclick="finalSave()">💾</button>
+<div class="fixed bottom-0 left-0 right-0 z-[50] bg-gradient-to-t from-black/80 pt-10 pb-8 px-4 flex items-end gap-3 pointer-events-none">
+    <button class="flex-none w-16 h-16 rounded-2xl bg-green-600 flex items-center justify-center pointer-events-auto text-2xl shadow-2xl" onclick="finalSave()">💾</button>
     <div id="history-list" class="pointer-events-auto"></div>
 </div>
 
@@ -111,33 +99,54 @@ let historyData = [];
 let currentIndex = -1;
 let videoEl = null;
 let speedMode = false;
-let audioCtx;
 let stabilityCounter = 0;
 const STABILITY_THRESHOLD = 5;
 
 let scale = 1, lastScale = 1, startDist = 0, posX = 0, posY = 0, startX = 0, startY = 0;
 
+/**
+ * 【中断復帰ロジック】 
+ * アプリがバックグラウンドに回った際、現在の履歴をlocalStorageに保存。
+ */
 window.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'hidden') {
-        if (historyData.length > 0) {
-            localStorage.setItem('taxhelper_backup', JSON.stringify(historyData));
-            sessionStorage.setItem('is_interrupted', 'true');
-        }
+    if (document.visibilityState === 'hidden' && historyData.length > 0) {
+        localStorage.setItem('taxhelper_backup', JSON.stringify(historyData));
+        sessionStorage.setItem('is_interrupted', 'true');
         pauseScanner(); 
     }
 });
 
+/**
+ * 【カメラ更新ロジック】 
+ * 監督指示：更新時に「再開」か「新規」かを選べるようにする。
+ */
+async function handleRefresh() {
+    if (historyData.length > 0) {
+        if (confirm("カメラを更新します。これまでのデータをどうしますか？\n\n【OK】再開（データを引き継ぐ）\n【キャンセル】新規（データを消してやり直す）")) {
+            updateAIChat("データを保持して再開します");
+        } else {
+            historyData = [];
+            updateHistoryUI();
+            localStorage.removeItem('taxhelper_backup');
+            updateAIChat("データをリセットして新規開始します");
+        }
+    }
+    await preInitCamera();
+}
+
 async function preInitCamera() {
     try {
+        if(videoEl) { videoEl.srcObject.getTracks().forEach(t => t.stop()); videoEl.remove(); }
         const backup = localStorage.getItem('taxhelper_backup');
-        const interrupted = sessionStorage.getItem('is_interrupted');
-        if (backup && interrupted) document.getElementById('recover-panel').classList.remove('hidden');
+        if (backup && sessionStorage.getItem('is_interrupted')) document.getElementById('recover-panel').classList.remove('hidden');
 
         const s = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment", width: { ideal: 1280 } } });
         videoEl = document.createElement('video'); videoEl.srcObject = s; videoEl.setAttribute('playsinline', ''); videoEl.play();
         videoEl.className = "w-full h-full object-cover"; document.getElementById('camera-container').prepend(videoEl);
+        
         setInterval(() => { if(!isPaused && videoEl.readyState === 4) detect(videoEl); }, 250);
-    } catch (e) { console.error("Camera failed", e); }
+        updateAIChat("カメラ準備完了");
+    } catch (e) { updateAIChat("カメラ起動エラー"); }
 }
 
 async function startApp(useRecover) {
@@ -147,8 +156,6 @@ async function startApp(useRecover) {
     }
     localStorage.removeItem('taxhelper_backup');
     sessionStorage.removeItem('is_interrupted');
-
-    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
     document.getElementById('ready-screen').style.display = 'none';
     resumeScanner();
     initZoomEvents();
@@ -156,104 +163,53 @@ async function startApp(useRecover) {
 
 function setSpeedMode(s) {
     speedMode = s;
-    document.getElementById('mode-speed').className = s ? "px-4 py-1 rounded-full text-[9px] font-bold bg-green-600" : "px-4 py-1 rounded-full text-[9px] font-bold";
-    document.getElementById('mode-normal').className = !s ? "px-4 py-1 rounded-full text-[9px] font-bold bg-blue-600" : "px-4 py-1 rounded-full text-[9px] font-bold";
+    document.getElementById('mode-speed').className = s ? "px-4 py-1 rounded-full text-[9px] bg-green-600" : "px-4 py-1 rounded-full text-[9px]";
+    document.getElementById('mode-normal').className = !s ? "px-4 py-1 rounded-full text-[9px] bg-blue-600" : "px-4 py-1 rounded-full text-[9px]";
 }
 
 function updateAIChat(text) { document.getElementById('msg').innerText = text; }
+function pauseScanner() { isPaused = true; document.getElementById('crosshair').classList.remove('blinking'); updateAIChat("停止中"); }
+function resumeScanner() { isPaused = false; document.getElementById('crosshair').classList.add('blinking'); updateAIChat("スキャン待機中..."); }
 
-function pauseScanner() { 
-    isPaused = true;
-    document.getElementById('crosshair').classList.remove('blinking'); 
-    updateAIChat("一時停止中（再開するには▶を押してね）");
-}
-
-function resumeScanner() { 
-    isPaused = false;
-    updateAIChat("スキャン待機中...");
-    document.getElementById('crosshair').classList.add('blinking'); 
-}
-
+/**
+ * 【レシート検知アルゴリズム】 
+ * 白色比率が15%〜50%の間で安定した時にレシートと判定。
+ */
 function detect(v) {
-    if (isPaused) return;
-
-    // --- 2.7.7 ロジックコメント ---
-    // 軽量スキャンのためのキャンバス処理（100x100に縮小して計算負荷を軽減）
+    if (isPaused || isProcessing) return;
     const c = document.getElementById('proc-canvas'); 
     const ctx = c.getContext('2d'); ctx.drawImage(v, 0, 0, 100, 100);
     const p = ctx.getImageData(0, 0, 100, 100).data; 
     let white = 0;
-    // 白色ピクセルの比率でレシートを検知（185以上の輝度をカウント）
     for (let i = 0; i < p.length; i += 4) { if (p[i] > 185 && p[i+1] > 185 && p[i+2] > 185) white++; }
     const ratio = white / 10000;
     
-    if (isProcessing) {
-        if (ratio < 0.08) {
-            isProcessing = false;
-            updateAIChat("スキャン待機中...");
-        } else {
-            updateAIChat("次のレシートに変えてね");
-        }
-        return; 
-    }
-
     if (ratio > 0.15 && ratio < 0.50) {
         stabilityCounter++;
-        if (stabilityCounter === 1) updateAIChat("そのまま止めて...");
         if (stabilityCounter >= STABILITY_THRESHOLD) {
-            stabilityCounter = 0;
-            triggerCapture(v);
+            stabilityCounter = 0; triggerCapture(v);
         }
-    } else {
-        stabilityCounter = 0;
-    }
+    } else { stabilityCounter = 0; }
 }
 
-// 物理演出（音・光・振動）とデータのカード化処理
 function triggerCapture(v) {
-    if(audioCtx && !isPaused) {
-        const o = audioCtx.createOscillator(); const g = audioCtx.createGain();
-        o.type = 'sine'; o.frequency.setValueAtTime(880, audioCtx.currentTime);
-        g.gain.setValueAtTime(0.1, audioCtx.currentTime); g.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.1);
-        o.connect(g); g.connect(audioCtx.destination); o.start(); o.stop(audioCtx.currentTime + 0.1);
-    }
-    
-    if (navigator.vibrate) navigator.vibrate(50);
-
-    const flash = document.getElementById('shutter-flash');
-    flash.classList.remove('flash-out');
-    flash.classList.add('flash-active');
-    setTimeout(() => {
-        flash.classList.remove('flash-active');
-        flash.classList.add('flash-out');
-    }, 40);
-
+    // 演出（フラッシュ・バイブ）は監督指示により削除
     const c = document.createElement('canvas'); c.width = v.videoWidth; c.height = v.videoHeight;
     c.getContext('2d').drawImage(v, 0, 0);
-    
-    // スキャンしたデータのカード化処理（unshiftで配列の先頭に追加）
     historyData.unshift({ img: c.toDataURL('image/jpeg', 0.6), amount: "", shop: "", items: [], date: new Date().toLocaleDateString() });
     updateHistoryUI();
     isProcessing = true; 
-
-    if (!speedMode) openPreview(0);
-    else updateAIChat("バッチリ！レシートを退けてね");
+    if (!speedMode) openPreview(0); else setTimeout(() => { isProcessing = false; }, 1000);
 }
 
-// プレビュー画面の展開（ズームリセットとデータ反映）
 function openPreview(i) {
-    currentIndex = i;
-    pauseScanner(); 
-    
-    // ズームと位置を初期状態にリセット
+    currentIndex = i; pauseScanner(); 
     scale = 1; posX = 0; posY = 0; updateTransform();
-    
     const it = historyData[i]; 
     document.getElementById('preview-img').src = it.img;
     document.getElementById('edit-date').value = it.date; 
     document.getElementById('edit-shop').value = it.shop;
     document.getElementById('edit-amount').value = it.amount;
-    document.getElementById('edit-items-area').innerHTML = "<p class='text-gray-400 text-center italic'>項目未解析</p>";
     document.getElementById('preview-overlay').style.display = 'block';
 }
 
@@ -268,13 +224,15 @@ function closePreview(save) {
         updateHistoryUI();
     }
     document.getElementById('preview-overlay').style.display = 'none';
-    currentIndex = -1;
-    isProcessing = true; 
-    resumeScanner();
+    currentIndex = -1; isProcessing = false; resumeScanner();
 }
 
 function updateTransform() { document.getElementById('preview-img').style.transform = `translate(${posX}px, ${posY}px) scale(${scale})`; }
 
+/**
+ * 【ズームロジック】 
+ * プレビュー画面でのピンチズームおよびドラッグ移動。
+ */
 function initZoomEvents() {
     const overlay = document.getElementById('preview-overlay');
     overlay.addEventListener('touchstart', (e) => {
@@ -284,9 +242,8 @@ function initZoomEvents() {
         } else if (e.touches.length === 1) {
             startX = e.touches[0].pageX - posX; startY = e.touches[0].pageY - posY;
         }
-    }, {passive: false});
+    });
     overlay.addEventListener('touchmove', (e) => {
-        e.preventDefault(); 
         if (e.touches.length === 2) {
             const dist = Math.hypot(e.touches[0].pageX - e.touches[1].pageX, e.touches[0].pageY - e.touches[1].pageY);
             scale = Math.min(Math.max(1, lastScale * (dist / startDist)), 4);
@@ -294,10 +251,9 @@ function initZoomEvents() {
             posX = e.touches[0].pageX - startX; posY = e.touches[0].pageY - startY;
         }
         updateTransform();
-    }, {passive: false});
+    });
 }
 
-// 履歴トレイのUI更新処理（カード要素の作成とイベント付与）
 function updateHistoryUI() {
     const l = document.getElementById('history-list'); l.innerHTML = "";
     historyData.forEach((d, i) => {
@@ -306,13 +262,11 @@ function updateHistoryUI() {
     });
 }
 
-// 保存クリーンアップ用メモ（クラウド送信成功後に実行すべき手順）
-// 1. localStorage.removeItem('taxhelper_backup') 
-// 2. historyData = [] 
-// 3. updateHistoryUI()
-function finalSave() { console.log("Future Cloud Save and State Reset"); }
-
-function toggleMsg() { document.getElementById('msg-box').classList.toggle('minimized'); }
+/**
+ * 【将来展望：保存ボタン】 
+ * データを確定して外部へ送信するための枠組み。
+ */
+function finalSave() { alert("履歴データを確定して保存します（将来機能）"); }
 </script>
 </body>
 </html>
