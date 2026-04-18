@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>TaxHelper Pro v2.8.37</title>
+    <title>TaxHelper Pro v2.8.38</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         /* ★照準配置の根拠: 現場でレシートを置く際、手が画面下部を覆うため、ターゲットを中央やや上(40%)に配置。 /* @LOCK */ */
@@ -28,14 +28,12 @@
 </head>
 <body class="bg-gray-900 text-white overflow-hidden font-sans text-xs flex flex-col h-screen" onload="preInitCamera()">
 
-<div id="ready-screen" class="fixed inset-0 z-[999] bg-black/40 backdrop-blur-sm flex flex-col items-center justify-center p-6 text-center">
-    <div id="ready-content">
-        <h1 class="text-2xl font-bold text-green-400 mb-2 tracking-widest text-center">RECEIPT SCANNER</h1>
-        <button onclick="startApp(false)" class="bg-green-600 px-16 py-5 rounded-2xl font-bold text-lg w-64 shadow-2xl pointer-events-auto">新しく始める</button>
-    </div>
+<div id="ready-screen" class="fixed inset-0 z-[500] bg-black/60 flex flex-col items-center justify-center p-6 text-center">
+    <h1 class="text-2xl font-bold text-green-400 mb-6 tracking-widest">RECEIPT SCANNER</h1>
+    <button onclick="startApp(false)" class="bg-green-600 px-16 py-5 rounded-2xl font-bold text-lg w-64 shadow-2xl">新しく始める</button>
     <div id="recover-panel" class="hidden mt-8 pt-8 border-t border-white/20 w-64">
-        <p class="text-blue-400 mb-4 font-bold text-center">中断したデータがあります</p>
-        <button onclick="startApp(true)" class="bg-blue-600 px-8 py-4 rounded-2xl font-bold w-full pointer-events-auto">続きから再開</button>
+        <p class="text-blue-400 mb-4 font-bold">中断したデータがあります</p>
+        <button onclick="startApp(true)" class="bg-blue-600 px-8 py-4 rounded-2xl font-bold w-full">続きから再開</button>
     </div>
 </div>
 
@@ -73,7 +71,7 @@
     <div id="crosshair" class="crosshair"><div class="crosshair-line crosshair-h"></div><div class="crosshair-line crosshair-v"></div></div>
 </div>
 
-<div class="fixed bottom-0 left-0 right-0 z-[250] bg-gradient-to-t from-black/80 pt-10 pb-8 px-4 flex items-end gap-3 pointer-events-none">
+<div class="fixed bottom-0 left-0 right-0 z-[100] bg-gradient-to-t from-black/80 pt-10 pb-8 px-4 flex items-end gap-3 pointer-events-none">
     <button class="flex-none w-16 h-16 rounded-2xl bg-green-600 flex items-center justify-center pointer-events-auto text-2xl shadow-2xl active:bg-green-700 transition-colors" onclick="finalSave()">💾</button>
     <div id="history-list" class="flex-1 flex gap-2 overflow-x-auto pointer-events-auto px-2"></div>
 </div>
@@ -83,13 +81,12 @@
 <script>
 /**
  * ★【絶対保持】撮影ステートマシンの定義 /* @LOCK */
- * 各フェーズは現場の物理動作（置く・待つ・撮る・どける）と完全に同期している。
  */
-const STATE_IDLE    = 1; // 待機：レシート不在を監視
-const STATE_KEEP    = 2; // 判定：検知後、人間が指を離すのを待つ「キープ」状態
-const STATE_CAPTURE = 3; // 撮影：静止画キャプチャ実行
-const STATE_EJECT   = 4; // どけ待ち：二重撮影バグを殺すための最重要ガード /* @LOCK */
-const STATE_RESET   = 5; // 初期化：次への準備
+const STATE_IDLE    = 1; 
+const STATE_KEEP    = 2; 
+const STATE_CAPTURE = 3; 
+const STATE_EJECT   = 4; 
+const STATE_RESET   = 5;
 
 let currentPhase = STATE_IDLE; 
 let isPaused = true;
@@ -102,19 +99,16 @@ let stabilityCounter = 0;
 /**
  * ★【絶対保持】現場の最適化定数 /* @LOCK */
  * STABILITY_THRESHOLD: 8 (約2秒)。
- * 根拠: 当初15(4秒)では長すぎたため、監督指示により「指をサッと抜くリズム」に合わせ半分に短縮。
  */
-const WHITE_THRESHOLD = 185; // レシートの白さを判定するしきい値
-const RATIO_LOW = 0.05;      // どけ完了判定の面積率
-const RATIO_HIGH = 0.15;     // 置いたとみなす面積率
+const WHITE_THRESHOLD = 185; 
+const RATIO_LOW = 0.05; 
+const RATIO_HIGH = 0.15; 
 const STABILITY_THRESHOLD = 8; 
 
 let scale = 1, lastScale = 1, startDist = 0, posX = 0, posY = 0, startX = 0, startY = 0;
 
 /**
  * preInitCamera: カメラの物理初期化 /* @LOCK */
- * 古いストリームを確実に停止(stop)させ、リソース競合による「真っ暗画面」を防ぐ。
- * object-cover設定を付与することで、常に画面いっぱいの視認性を確保する。
  */
 async function preInitCamera() {
     try {
@@ -122,7 +116,6 @@ async function preInitCamera() {
         const s = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment", width: { ideal: 1280 } } });
         videoEl = document.createElement('video'); videoEl.srcObject = s; videoEl.setAttribute('playsinline', ''); videoEl.play();
         videoEl.className = "w-full h-full object-cover"; document.getElementById('camera-container').prepend(videoEl);
-        /* 250msおきの監視: 現場の変化を逃さないためのサンプリングレート */
         setInterval(() => { if(!isPaused && videoEl.readyState === 4) runLoop(videoEl); }, 250);
         updateAIChat("カメラ準備完了");
     } catch (e) { updateAIChat("カメラ起動エラー"); }
@@ -130,7 +123,6 @@ async function preInitCamera() {
 
 /**
  * startApp: アプリの物理的な起動制御 /* @LOCK */
- * localStorageからのデータ復旧を行い、現場でのデータ紛失リスクを最小化する。
  */
 async function startApp(useRecover) {
     if (useRecover) {
@@ -144,8 +136,6 @@ async function startApp(useRecover) {
 
 /**
  * runLoop: 撮影エンジンの心臓部 /* @LOCK */
- * 監督指示により、STATE_KEEP時の文言を「そのままキープしてね」に変更し、直感性を向上。
- * 白色面積(ratio)を基に、物理的なレシートの有無をミリ秒単位で判定する。
  */
 function runLoop(v) {
     if (isPaused) return;
@@ -175,7 +165,6 @@ function runLoop(v) {
             break;
         case STATE_EJECT: 
             updateAIChat("撮影完了、レシートをどけてください...");
-            /* どけるまで絶対に次を撮らせない。物理世界との同期不全を防ぐ生命線 /* @LOCK */ */
             if (ratio < RATIO_LOW) currentPhase = STATE_RESET;
             break;
         case STATE_RESET: 
@@ -187,7 +176,6 @@ function runLoop(v) {
 
 /**
  * finalSave: 確定保存処理 /* @LOCK */
- * 撮り溜めた一時データを、最終的な保存用データとして一括処理するゲートウェイ。
  */
 function finalSave() {
     if (historyData.length === 0) {
@@ -201,7 +189,6 @@ function finalSave() {
 
 /**
  * triggerCapture: 静止画の物理生成 /* @LOCK */
- * ビデオ解像度そのままをCanvasに転写。unshiftにより「最新が左」の履歴UIを実現。
  */
 function triggerCapture(v) {
     const c = document.createElement('canvas'); c.width = v.videoWidth; c.height = v.videoHeight;
@@ -213,8 +200,6 @@ function triggerCapture(v) {
 
 /**
  * openPreview: プレビュー展開と安全停止 /* @LOCK */
- * 編集中の誤動作を防ぐため、isPausedを即座に有効化(pauseScanner)。
- * scaleを1にリセットし、object-fit: cover環境下での正確な初期表示を保証する。
  */
 function openPreview(i) {
     currentIndex = i; 
@@ -230,7 +215,6 @@ function openPreview(i) {
 
 /**
  * closePreview: 編集結果の反映とループ再開 /* @LOCK */
- * 破棄か反映かを物理的に選択。完了後、スキャンループを安全に再開する。
  */
 function closePreview(save) {
     if (currentIndex !== -1) {
@@ -258,7 +242,6 @@ function updateAIChat(text) { document.getElementById('msg').innerText = text; }
 
 /**
  * updateHistoryUI: 履歴リストの再描画 /* @LOCK */
- * 現場での「撮れたかどうか」の視覚的安心感を担保する。
  */
 function updateHistoryUI() {
     const l = document.getElementById('history-list'); l.innerHTML = "";
@@ -270,7 +253,6 @@ function updateHistoryUI() {
 
 /**
  * handleRefresh: 物理リセット /* @LOCK */
- * ブラウザ側のリソース不調を解決するための最終手段。既存データの保持を選択可能に。
  */
 function handleRefresh() {
     if (historyData.length > 0 && confirm("データを保持してカメラを再起動しますか？")) { updateAIChat("継続中"); }
@@ -282,7 +264,6 @@ function updateTransform() { document.getElementById('preview-img').style.transf
 
 /**
  * initZoomEvents: ピンチ・スワイプの物理制御 /* @LOCK */
- * レシートの微細な文字を現場で確認するための拡大・移動ロジック。
  */
 function initZoomEvents() {
     const overlay = document.getElementById('preview-overlay');
@@ -299,7 +280,6 @@ function initZoomEvents() {
 
 /**
  * visibilitychange: アプリ中断時の自動救済 /* @LOCK */
- * 電話の着信等でブラウザが隠れた際、未保存データをlocalStorageへ緊急退避させる。
  */
 window.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'hidden' && historyData.length > 0) { localStorage.setItem('taxhelper_backup', JSON.stringify(historyData)); sessionStorage.setItem('is_interrupted', 'true'); }
